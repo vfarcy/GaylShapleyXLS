@@ -203,6 +203,57 @@ AffectationEquipesPasAPas   ←── (ou AffectationEquipesProjets pour plus de
 
 ---
 
+## Installation et intégration du code VBA
+
+### Option 1 : À partir du fichier `.vb` (pour développeurs)
+
+Le fichier `GaylShapley.vb` contient tout le code source VBA. Pour l'intégrer dans Excel :
+
+**1. Ouvrir l'éditeur VBA**
+   - Lancer Excel
+   - Appuyer sur `Alt + F11` pour ouvrir l'**Éditeur VBA**
+   - Ou via le menu : **Outils** → **Macros** → **Éditeur Visual Basic**
+
+**2. Créer ou accéder au module**
+   - Dans la fenêtre de gauche (**Explorateur de projets**), développer votre classeur
+   - Clic droit sur **Modules** → **Insérer un module**
+   - Une feuille blanche s'ouvre : vous avez un nouveau module
+
+**3. Importer le code**
+   - **Option A** : Copier-coller
+     - Ouvrir `GaylShapley.vb` dans un éditeur de texte
+     - Copier tout le contenu (Ctrl+A, Ctrl+C)
+     - Coller dans le module VBA (Ctrl+V)
+   
+   - **Option B** : Importer directement (recommandé)
+     - Dans l'éditeur VBA, **Fichier** → **Importer le fichier...**
+     - Sélectionner `GaylShapley.vb`
+     - Le module est créé automatiquement
+
+**4. Sauvegarder en `.xlsm`**
+   - Retourner à Excel (Alt+Q)
+   - **Fichier** → **Enregistrer sous...**
+   - Format : choisir **"Classeur Excel prenant en charge les macros (.xlsm)"**
+   - Les macros sont maintenant intégrées et exécutables
+
+### Option 2 : Utiliser directement le classeur packagé
+
+Si le dépôt GitHub fournit un fichier `.xlsm` pré-intégré :
+   - Télécharger le fichier `.xlsm`
+   - S'assurer que **les macros sont activées** au moment de l'ouverture (Excel peut afficher une alerte de sécurité)
+   - Les macros sont prêtes à utiliser
+
+### Activation des macros
+
+Certaines versions d'Excel demandent une confirmation lors de l'ouverture d'un classeur avec macros :
+   - **Message de sécurité** : "Les macros ont été désactivées. Cliquez ici pour les activer."
+   - Clic sur **"Activer les macros"** ou **"Options..."** → **"Activer ce contenu"**
+   - Les macros restent activées tant que le fichier n'est pas déplacé
+
+> **Note** : Pour exécuter les macros via le menu, aller à **Affichage** → **Macros** → **Afficher les macros** (ou `Alt + F8`), puis sélectionner la macro à exécuter.
+
+---
+
 ## Prérequis
 
 - Microsoft Excel (Windows) avec macros activées, sauvegardé en `.xlsm`
