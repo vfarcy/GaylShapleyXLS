@@ -136,17 +136,16 @@ Sub GenererDonneesDeTest()
     For i = 1 To nbProjets: wsPE.Cells(1, 1 + i).Value = "Choix " & i: Next i
     wsPE.Rows(1).Font.Bold = True
 
-    Dim eq As Long
+    Dim eq As Long, nbM As Long, debut As Long, eNum As Long
     For eq = 1 To nbEquipes
         wsPE.Cells(eq + 1, 1).Value = "Équipe " & eq
 
-        Dim nbM As Long: nbM = eqTaille(eq)
-        Dim debut As Long: debut = eqDebut(eq)
+        nbM = eqTaille(eq)
+        debut = eqDebut(eq)
 
         ' Préférences de chaque membre : prefsMembres(m, j) = nom du j-ième choix du membre m
         Dim prefsMembres() As String
         ReDim prefsMembres(1 To nbM, 1 To nbProjets)
-        Dim eNum As Long
         For i = 1 To nbM
             eNum = elevesShuf(debut + i - 1)
             For j = 1 To nbProjets
@@ -207,10 +206,11 @@ Sub GenererDonneesDeTest()
     For eq = 1 To nbEquipes: wsP.Cells(1, 5 + eq).Value = "Équipe " & eq: Next eq
     wsP.Rows(1).Font.Bold = True
 
+    Dim minEq As Long, maxEq As Long
     For i = 1 To nbProjets
         wsP.Cells(i + 1, 1).Value = "Projet " & Chr(64 + i)
-        Dim minEq As Long: minEq = Application.WorksheetFunction.RandBetween(1, 2)
-        Dim maxEq As Long: maxEq = Application.WorksheetFunction.RandBetween(minEq, minEq + 2)
+        minEq = Application.WorksheetFunction.RandBetween(1, 2)
+        maxEq = Application.WorksheetFunction.RandBetween(minEq, minEq + 2)
         wsP.Cells(i + 1, 2).Value = minEq
         wsP.Cells(i + 1, 3).Value = maxEq
         wsP.Cells(i + 1, 4).Value = tailleMin    ' Le projet accepte des équipes de taille comprise
@@ -219,8 +219,9 @@ Sub GenererDonneesDeTest()
         ' Calcul des scores : score(eq) = moyenne du rang du projet chez les membres de eq
         Dim scores() As Double: ReDim scores(1 To nbEquipes)
         Dim projetNom As String: projetNom = "Projet " & Chr(64 + i)
+        Dim scoreTotal As Double
         For eq = 1 To nbEquipes
-            Dim scoreTotal As Double: scoreTotal = 0
+            scoreTotal = 0
             For j = 1 To eqTaille(eq)
                 Dim eNo As Long: eNo = elevesShuf(eqDebut(eq) + j - 1)
                 For k = 1 To nbProjets
@@ -235,8 +236,9 @@ Sub GenererDonneesDeTest()
         ' Attribution des rangs (rang 1 = score le plus bas = équipe la plus enthousiaste)
         ' Ex-aequo : le même rang est attribué (le rang suivant est donc sauté)
         Dim rangs() As Long: ReDim rangs(1 To nbEquipes)
+        Dim rang As Long
         For eq = 1 To nbEquipes
-            Dim rang As Long: rang = 1
+            rang = 1
             For k = 1 To nbEquipes
                 If scores(k) < scores(eq) Then rang = rang + 1
             Next k
