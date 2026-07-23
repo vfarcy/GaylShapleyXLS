@@ -138,6 +138,9 @@ Sub GenererDonneesDeTest()
     Dim eq As Long, nbM As Long, debut As Long, eNum As Long
     Dim prefsMembres() As String
     Dim projUsed() As Boolean
+    Dim pos As Long, pIdx As Long, maxV As Long, winner As Long
+    Dim votesP() As Long
+
     For eq = 1 To nbEquipes
         wsPE.Cells(eq + 1, 1).Value = "Équipe " & eq
 
@@ -156,8 +159,6 @@ Sub GenererDonneesDeTest()
         ' Vote majoritaire position par position
         ReDim projUsed(1 To nbProjets)
 
-        Dim pos As Long, pIdx As Long, maxV As Long, winner As Long
-        Dim votesP() As Long
         For pos = 1 To nbProjets
             ReDim votesP(1 To nbProjets)
 
