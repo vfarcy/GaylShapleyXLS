@@ -276,6 +276,7 @@ Sub AffectationEquipesProjets()
     Dim equipeActuelle As String, indexProp As Long, projetVise As String
     Dim affectesAuProjet As Object, maxEqP As Long, pireEquipe As String
     Dim rangPire As Long, eAff As Variant, rangNouvelle As Long
+    Dim ligneR As Long, projet As Variant, listeEq As String, nbAff As Long
 
     ' === DÉBUT DU CODE EXÉCUTABLE ===
     On Error Resume Next
@@ -409,8 +410,7 @@ Sub AffectationEquipesProjets()
     wsR.Cells.ClearContents
     wsR.Range("A1:C1").Value = Array("Projet", "Équipes Affectées", "Statut Capacité")
     wsR.Range("A1:C1").Font.Bold = True
-    Dim ligneR As Long: ligneR = 2
-    Dim projet As Variant, listeEq As String, nbAff As Long
+    ligneR = 2
     For Each projet In affectationsProjet.Keys
         wsR.Cells(ligneR, 1).Value = projet
         listeEq = IIf(affectationsProjet(projet).Count > 0, Join(affectationsProjet(projet).Keys, ", "), "Aucune")
