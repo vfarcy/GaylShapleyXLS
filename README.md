@@ -2,7 +2,7 @@
 
 Implémentation en **VBA Excel** de l'algorithme de Gale-Shapley pour affecter des **équipes d'élèves** à des projets de manière stable et optimale selon les préférences de chacun.
 
-> **État du projet ✅** : Code compilé et fonctionnel. Limite des 26 projets levée (support numérique illimité). Tous les tests passent. Branche `dev` synchronisée avec GitHub.
+> **État du projet ✅** : Code compilé et fonctionnel sur la branche main. 
 
 ---
 
