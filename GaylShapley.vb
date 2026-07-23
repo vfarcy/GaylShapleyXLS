@@ -9,9 +9,23 @@ Option Explicit
 '   - Préférences_Projets : classement des équipes par projet + capacités
 '================================================================================================
 Sub GenererDonneesDeTest()
-
+    ' === DÉCLARATIONS COMPLÈTES AU DÉBUT ===
     Dim nbEleves As Long, nbProjets As Long, tailleMin As Long, tailleMax As Long
+    Dim i As Long, j As Long, k As Long, r As Long, tmpL As Long
+    Dim wsE As Worksheet, wsEq As Worksheet, wsPE As Worksheet, wsP As Worksheet
+    Dim prefsInd() As String, projs() As String, tmpS As String
+    Dim elevesShuf() As Long
+    Dim eqDebut() As Long, eqTaille() As Long
+    Dim nbEquipes As Long, cursor As Long, restants As Long, taille As Long, maxT As Long
+    Dim eq As Long, nbM As Long, debut As Long, eNum As Long
+    Dim prefsMembres() As String, projUsed() As Boolean
+    Dim pos As Long, pIdx As Long, maxV As Long, winner As Long, votesP() As Long
+    Dim minEq As Long, maxEq As Long
+    Dim projetNom As String, scoreTotal As Double
+    Dim scores() As Double, eNo As Long
+    Dim rang As Long, rangs() As Long
 
+    ' === DÉBUT DU CODE EXÉCUTABLE ===
     On Error Resume Next
     nbEleves = CLng(InputBox("Nombre d'élèves ?", "Génération des données"))
     If Err.Number <> 0 Or nbEleves <= 1 Then MsgBox "Annulé.", vbInformation: Exit Sub
@@ -34,12 +48,10 @@ Sub GenererDonneesDeTest()
     Application.ScreenUpdating = False
     Randomize
 
-    Dim i As Long, j As Long, k As Long, r As Long, tmpL As Long
-
     ' ======================================================================
     ' ÉTAPE 1 : Préférences individuelles des élèves (Fisher-Yates)
     ' ======================================================================
-    Dim wsE As Worksheet: Set wsE = ThisWorkbook.Sheets("Préférences_Élèves")
+    Set wsE = ThisWorkbook.Sheets("Préférences_Élèves")
     wsE.Cells.Clear
     wsE.Cells(1, 1).Value = "Élève"
     For i = 1 To nbProjets
@@ -48,14 +60,11 @@ Sub GenererDonneesDeTest()
     wsE.Rows(1).Font.Bold = True
 
     ' Mémoire des préférences individuelles : prefsInd(élève, position) = nom du projet
-    Dim prefsInd() As String
     ReDim prefsInd(1 To nbEleves, 1 To nbProjets)
 
-    Dim projs() As String
     ReDim projs(1 To nbProjets)
     For i = 1 To nbProjets: projs(i) = "Projet " & Chr(64 + i): Next i
 
-    Dim tmpS As String
     For i = 1 To nbEleves
         wsE.Cells(i + 1, 1).Value = "Élève " & i
         For j = nbProjets To 2 Step -1
@@ -73,7 +82,6 @@ Sub GenererDonneesDeTest()
     ' ÉTAPE 2 : Formation aléatoire des équipes
     ' ======================================================================
     ' Mélange des indices d'élèves
-    Dim elevesShuf() As Long
     ReDim elevesShuf(1 To nbEleves)
     For i = 1 To nbEleves: elevesShuf(i) = i: Next i
     For i = nbEleves To 2 Step -1
@@ -82,11 +90,9 @@ Sub GenererDonneesDeTest()
     Next i
 
     ' Construction des équipes par découpe séquentielle
-    Dim eqDebut() As Long, eqTaille() As Long
     ReDim eqDebut(1 To nbEleves): ReDim eqTaille(1 To nbEleves)
-    Dim nbEquipes As Long: nbEquipes = 0
-    Dim cursor As Long: cursor = 1
-    Dim restants As Long, taille As Long, maxT As Long
+    nbEquipes = 0
+    cursor = 1
 
     Do While cursor <= nbEleves
         nbEquipes = nbEquipes + 1
@@ -109,7 +115,7 @@ Sub GenererDonneesDeTest()
     Loop
 
     ' Écriture feuille Équipes
-    Dim wsEq As Worksheet: Set wsEq = ThisWorkbook.Sheets("Équipes")
+    Set wsEq = ThisWorkbook.Sheets("Équipes")
     wsEq.Cells.Clear
     wsEq.Cells(1, 1).Value = "Équipe"
     For i = 1 To tailleMax: wsEq.Cells(1, 1 + i).Value = "Membre " & i: Next i
@@ -129,12 +135,8 @@ Sub GenererDonneesDeTest()
     ' et le projet avec le plus de votes obtient cette position dans la liste
     ' de l'équipe. En cas d'égalité, le projet d'indice le plus bas gagne.
     ' ======================================================================
-    Dim wsPE As Worksheet: Set wsPE = ThisWorkbook.Sheets("Préférences_Équipes")
-    Dim eq As Long, nbM As Long, debut As Long, eNum As Long
-    Dim prefsMembres() As String
-    Dim projUsed() As Boolean
-    Dim pos As Long, pIdx As Long, maxV As Long, winner As Long
-    Dim votesP() As Long
+    Set wsPE = ThisWorkbook.Sheets("Préférences_Équipes")
+    ReDim projUsed(1 To nbProjets)
 
     wsPE.Cells.Clear
     wsPE.Cells(1, 1).Value = "Équipe"
@@ -197,11 +199,7 @@ Sub GenererDonneesDeTest()
     ' Classement de chaque équipe par un projet = moyenne du rang que les membres
     ' accordent à ce projet dans leur liste individuelle (score bas = équipe enthousiaste).
     ' ======================================================================
-    Dim wsP As Worksheet: Set wsP = ThisWorkbook.Sheets("Préférences_Projets")
-    Dim minEq As Long, maxEq As Long
-    Dim projetNom As String, scoreTotal As Double
-    Dim scores() As Double, eNo As Long
-    Dim rang As Long, rangs() As Long
+    Set wsP = ThisWorkbook.Sheets("Préférences_Projets")
 
     wsP.Cells.Clear
     wsP.Cells(1, 1).Value = "Projet"
