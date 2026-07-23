@@ -137,6 +137,8 @@ Sub GenererDonneesDeTest()
     wsPE.Rows(1).Font.Bold = True
 
     Dim eq As Long, nbM As Long, debut As Long, eNum As Long
+    Dim prefsMembres() As String
+    Dim projUsed() As Boolean
     For eq = 1 To nbEquipes
         wsPE.Cells(eq + 1, 1).Value = "Équipe " & eq
 
@@ -144,7 +146,6 @@ Sub GenererDonneesDeTest()
         debut = eqDebut(eq)
 
         ' Préférences de chaque membre : prefsMembres(m, j) = nom du j-ième choix du membre m
-        Dim prefsMembres() As String
         ReDim prefsMembres(1 To nbM, 1 To nbProjets)
         For i = 1 To nbM
             eNum = elevesShuf(debut + i - 1)
@@ -154,7 +155,6 @@ Sub GenererDonneesDeTest()
         Next i
 
         ' Vote majoritaire position par position
-        Dim projUsed() As Boolean
         ReDim projUsed(1 To nbProjets)
 
         Dim pos As Long, pIdx As Long, maxV As Long, winner As Long
