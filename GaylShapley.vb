@@ -958,7 +958,7 @@ Sub RemplirAffectationsParProjet()
     Dim ligne As Long
     Dim capacites As Object, rangsProjet As Object, membres As Object
     Dim rd As Object, lastColP As Long, nomEqStr As String
-    Dim memArr() As String, nbMem As Long, tailleEq As Long
+    Dim memList As String, nbMem As Long, tailleEq As Long
     Dim nomEqClean As String, premiereLigne As Long, statut As String
     Dim eqH As String
 
@@ -1010,16 +1010,14 @@ Sub RemplirAffectationsParProjet()
     For i = 2 To wsEq.Cells(wsEq.Rows.Count, "A").End(xlUp).Row
         nomEqStr = Trim(wsEq.Cells(i, 1).Value)
         If nomEqStr <> "" Then
-            nbMem = 0
-            ReDim memArr(0)
+            memList = ""
             For j = 2 To wsEq.Cells(i, wsEq.Columns.Count).End(xlToLeft).Column
                 If Trim(wsEq.Cells(i, j).Value) <> "" Then
-                    nbMem = nbMem + 1
-                    ReDim Preserve memArr(1 To nbMem)
-                    memArr(nbMem) = Trim(wsEq.Cells(i, j).Value)
+                    If memList <> "" Then memList = memList & ", "
+                    memList = memList & Trim(wsEq.Cells(i, j).Value)
                 End If
             Next j
-            membres(nomEqStr) = IIf(nbMem > 0, Join(memArr, ", "), "(aucun)")
+            membres(nomEqStr) = IIf(memList <> "", memList, "(aucun)")
         End If
     Next i
 
@@ -1049,7 +1047,7 @@ Sub RemplirAffectationsParProjet()
                 wsAff.Cells(ligne, 3).Value = nomEqClean
                 wsAff.Cells(ligne, 4).Value = IIf(membres.Exists(nomEqClean), membres(nomEqClean), "?")
                 tailleEq = 0
-                If membres.Exists(nomEqClean) Then
+                If membres.Exists(nomEqClean) And membres(nomEqClean) <> "(aucun)" Then
                     tailleEq = UBound(Split(membres(nomEqClean), ", ")) + 1
                 End If
                 wsAff.Cells(ligne, 5).Value = tailleEq
