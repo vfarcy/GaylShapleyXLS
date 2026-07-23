@@ -1,1071 +1,787 @@
-Option Explicit ' Force la déclaration de toutes les variables, une bonne pratique.
+Option Explicit
 
-'****************************************************************************************
-' MACRO UNIFIÉE : Génère les deux feuilles de préférences en une seule fois.
-'****************************************************************************************
+'================================================================================================
+' MACRO 1 : GÉNÉRATION DES DONNÉES DE TEST
+' Feuilles générées :
+'   - Préférences_Élèves  : préférences individuelles de chaque élève
+'   - Équipes             : composition de chaque équipe
+'   - Préférences_Équipes : préférences agrégées de chaque équipe (vote majoritaire)
+'   - Préférences_Projets : classement des équipes par projet + capacités
+'================================================================================================
 Sub GenererDonneesDeTest()
 
-    Dim nbProjets As Long, nbEleves As Long
-    Dim wsProjets As Worksheet, wsEleves As Worksheet
-    
-    ' --- ÉTAPE 1 : Saisie unique des données ---
-    On Error Resume Next
-    nbEleves = CLng(InputBox("Combien d'élèves souhaitez-vous générer ?", "Génération des Données"))
-    If Err.Number <> 0 Or nbEleves <= 0 Then
-        MsgBox "Génération annulée.", vbInformation
-        Exit Sub
-    End If
-    
-    nbProjets = CLng(InputBox("Combien de projets souhaitez-vous générer ?", "Génération des Données"))
-    If Err.Number <> 0 Or nbProjets <= 0 Then
-        MsgBox "Génération annulée.", vbInformation
-        Exit Sub
-    End If
-    On Error GoTo 0
-    
-    Application.ScreenUpdating = False
+    Dim nbEleves As Long, nbProjets As Long, tailleMin As Long, tailleMax As Long
 
-    ' --- ÉTAPE 2 : Génération de la feuille Préférences_Projets ---
-    Set wsProjets = ThisWorkbook.Sheets("Préférences_Projets")
-    wsProjets.Cells.Clear
-    
-    wsProjets.Range("A1:C1").Value = Array("Projet", "Min", "Max")
-    Dim i As Long, j As Long
-    For i = 1 To nbEleves
-        wsProjets.Cells(1, 3 + i).Value = "Élève " & i
-    Next i
-    wsProjets.Rows(1).Font.Bold = True
-    
+    On Error Resume Next
+    nbEleves = CLng(InputBox("Nombre d'élèves ?", "Génération des données"))
+    If Err.Number <> 0 Or nbEleves <= 1 Then MsgBox "Annulé.", vbInformation: Exit Sub
+    Err.Clear
+    nbProjets = CLng(InputBox("Nombre de projets (max 26) ?", "Génération des données"))
+    If Err.Number <> 0 Or nbProjets <= 0 Or nbProjets > 26 Then MsgBox "Annulé.", vbInformation: Exit Sub
+    Err.Clear
+    tailleMin = CLng(InputBox("Taille minimale des équipes ?", "Génération des données", "2"))
+    If Err.Number <> 0 Or tailleMin <= 0 Then MsgBox "Annulé.", vbInformation: Exit Sub
+    Err.Clear
+    tailleMax = CLng(InputBox("Taille maximale des équipes ?", "Génération des données", "4"))
+    If Err.Number <> 0 Or tailleMax < tailleMin Then MsgBox "Annulé.", vbInformation: Exit Sub
+    On Error GoTo 0
+
+    If tailleMin > nbEleves Then
+        MsgBox "Erreur : la taille minimale d'équipe dépasse le nombre d'élèves.", vbCritical
+        Exit Sub
+    End If
+
+    Application.ScreenUpdating = False
     Randomize
-    For i = 1 To nbProjets
-        wsProjets.Cells(i + 1, 1).Value = "Projet " & Chr(64 + i)
-        
-        Dim capMin As Long: capMin = Application.WorksheetFunction.RandBetween(1, 3)
-        Dim capMax As Long: capMax = Application.WorksheetFunction.RandBetween(capMin, capMin + 5)
-        wsProjets.Cells(i + 1, 2).Value = capMin
-        wsProjets.Cells(i + 1, 3).Value = capMax
-        
-        Dim rangs As Object: Set rangs = CreateObject("System.Collections.ArrayList")
-        For j = 1 To nbEleves
-            rangs.Add j
-        Next j
-        
-        Dim temp As Variant, r As Long
-        For j = rangs.Count - 1 To 0 Step -1
-            r = Int(j * Rnd)
-            temp = rangs(j)
-            rangs(j) = rangs(r)
-            rangs(r) = temp
-        Next j
-        
-        For j = 0 To rangs.Count - 1
-            wsProjets.Cells(i + 1, 4 + j).Value = rangs(j)
-        Next j
-    Next i
-    wsProjets.Columns.AutoFit
 
-    ' --- ÉTAPE 3 : Génération de la feuille Préférences_Élèves ---
-    Set wsEleves = ThisWorkbook.Sheets("Préférences_Élèves")
-    wsEleves.Cells.Clear
-    
-    wsEleves.Cells(1, 1).Value = "Élève"
-    For i = 1 To nbProjets
-        wsEleves.Cells(1, 1 + i).Value = "Choix " & i
-    Next i
-    wsEleves.Rows(1).Font.Bold = True
+    Dim i As Long, j As Long, k As Long, r As Long
 
-    Dim listeProjets As Object: Set listeProjets = CreateObject("System.Collections.ArrayList")
+    ' ======================================================================
+    ' ÉTAPE 1 : Préférences individuelles des élèves (Fisher-Yates)
+    ' ======================================================================
+    Dim wsE As Worksheet: Set wsE = ThisWorkbook.Sheets("Préférences_Élèves")
+    wsE.Cells.Clear
+    wsE.Cells(1, 1).Value = "Élève"
     For i = 1 To nbProjets
-        listeProjets.Add "Projet " & Chr(64 + i)
+        wsE.Cells(1, 1 + i).Value = "Choix " & i
     Next i
+    wsE.Rows(1).Font.Bold = True
 
+    ' Mémoire des préférences individuelles : prefsInd(élève, position) = nom du projet
+    Dim prefsInd() As String
+    ReDim prefsInd(1 To nbEleves, 1 To nbProjets)
+
+    Dim projs() As String
+    ReDim projs(1 To nbProjets)
+    For i = 1 To nbProjets: projs(i) = "Projet " & Chr(64 + i): Next i
+
+    Dim tmpS As String
     For i = 1 To nbEleves
-        wsEleves.Cells(i + 1, 1).Value = "Élève " & i
-        
-        For j = listeProjets.Count - 1 To 0 Step -1
-            r = Int(j * Rnd)
-            temp = listeProjets(j)
-            listeProjets(j) = listeProjets(r)
-            listeProjets(r) = temp
+        wsE.Cells(i + 1, 1).Value = "Élève " & i
+        For j = nbProjets To 2 Step -1
+            r = Int(j * Rnd) + 1
+            tmpS = projs(j): projs(j) = projs(r): projs(r) = tmpS
         Next j
-        
-        For j = 0 To listeProjets.Count - 1
-            wsEleves.Cells(i + 1, 2 + j).Value = listeProjets(j)
+        For j = 1 To nbProjets
+            wsE.Cells(i + 1, 1 + j).Value = projs(j)
+            prefsInd(i, j) = projs(j)
         Next j
     Next i
-    wsEleves.Columns.AutoFit
-    
-    Application.ScreenUpdating = True
-    MsgBox nbEleves & " élèves et " & nbProjets & " projets ont été générés avec succès.", vbInformation
+    wsE.Columns.AutoFit
 
-End Sub
-
-
-
-'****************************************************************************************
-' MACRO D'AFFECTATION (Version Corrigée avec logique focalisée)
-'****************************************************************************************
-Sub AffectationElevesProjets()
-
-    ' Déclaration des feuilles
-    Dim wsEleves As Worksheet, wsProjets As Worksheet, wsResultats As Worksheet
-    
-    ' Structures de données
-    Dim elevesPrefs As Object, projetsPrefs As Object, projetsCapacites As Object
-    Dim affectationsProjet As Object, affectationEleve As Object
-    Dim celibataires As Collection
-    
-    ' Initialisation
-    Set elevesPrefs = CreateObject("Scripting.Dictionary")
-    Set projetsPrefs = CreateObject("Scripting.Dictionary")
-    Set projetsCapacites = CreateObject("Scripting.Dictionary")
-    Set affectationsProjet = CreateObject("Scripting.Dictionary")
-    Set affectationEleve = CreateObject("Scripting.Dictionary")
-    Set celibataires = New Collection
-
-    ' --- Association des feuilles ---
-    On Error Resume Next
-    Set wsEleves = ThisWorkbook.Sheets("Préférences_Élèves")
-    Set wsProjets = ThisWorkbook.Sheets("Préférences_Projets")
-    Set wsResultats = ThisWorkbook.Sheets("Résultats")
-    If wsEleves Is Nothing Or wsProjets Is Nothing Or wsResultats Is Nothing Then
-        MsgBox "Erreur : Une ou plusieurs feuilles ('Préférences_Élèves', 'Préférences_Projets', 'Résultats') sont introuvables.", vbCritical
-        Exit Sub
-    End If
-    On Error GoTo 0
-    
-    Application.ScreenUpdating = False
-
-    ' --- 1. LECTURE DES DONNÉES ---
-    Dim i As Long, j As Long, eleve As Variant
-    ' Lecture Élèves
-    For i = 2 To wsEleves.Cells(wsEleves.Rows.Count, "A").End(xlUp).Row
-        Dim nomEleve As String: nomEleve = wsEleves.Cells(i, 1).Value
-        If nomEleve <> "" Then
-            celibataires.Add nomEleve
-            affectationEleve(nomEleve) = ""
-            Dim prefsList As New Collection
-            For j = 2 To wsEleves.Cells(i, wsEleves.Columns.Count).End(xlToLeft).Column
-                prefsList.Add wsEleves.Cells(i, j).Value
-            Next j
-            Set elevesPrefs(nomEleve) = prefsList
-        End If
+    ' ======================================================================
+    ' ÉTAPE 2 : Formation aléatoire des équipes
+    ' ======================================================================
+    ' Mélange des indices d'élèves
+    Dim elevesShuf() As Long
+    ReDim elevesShuf(1 To nbEleves)
+    For i = 1 To nbEleves: elevesShuf(i) = i: Next i
+    Dim tmpL As Long
+    For i = nbEleves To 2 Step -1
+        r = Int(i * Rnd) + 1
+        tmpL = elevesShuf(i): elevesShuf(i) = elevesShuf(r): elevesShuf(r) = tmpL
     Next i
-    ' Lecture Projets
-    For i = 2 To wsProjets.Cells(wsProjets.Rows.Count, "A").End(xlUp).Row
-        Dim nomProjet As String: nomProjet = wsProjets.Cells(i, 1).Value
-        If nomProjet <> "" Then
-            projetsCapacites(nomProjet) = Array(wsProjets.Cells(i, 2).Value, wsProjets.Cells(i, 3).Value)
-            Set affectationsProjet(nomProjet) = CreateObject("Scripting.Dictionary")
-            Dim rangsDict As Object: Set rangsDict = CreateObject("Scripting.Dictionary")
-            For j = 4 To wsProjets.Cells(1, wsProjets.Columns.Count).End(xlToLeft).Column
-                rangsDict(wsProjets.Cells(1, j).Value) = wsProjets.Cells(i, j).Value
-            Next j
-            Set projetsPrefs(nomProjet) = rangsDict
-        End If
-    Next i
-    
-    ' --- 2. EXÉCUTION DE L'ALGORITHME (Logique Corrigée) ---
-    While celibataires.Count > 0
-        Dim eleveActuel As String: eleveActuel = celibataires(1) ' On prend le premier de la liste
-        celibataires.Remove 1 ' On le retire de la liste des célibataires à traiter
 
-        Dim estPlace As Boolean: estPlace = False
-        
-        ' On boucle sur les choix de cet élève JUSQU'À ce qu'il soit placé ou qu'il n'ait plus de choix
-        For j = 1 To elevesPrefs(eleveActuel).Count
-            Dim projetVise As String: projetVise = elevesPrefs(eleveActuel)(j)
-            
-            Dim affectesAuProjet As Object: Set affectesAuProjet = affectationsProjet(projetVise)
-            Dim capaciteMax As Long: capaciteMax = projetsCapacites(projetVise)(1)
+    ' Construction des équipes par découpe séquentielle
+    Dim eqDebut() As Long, eqTaille() As Long
+    ReDim eqDebut(1 To nbEleves): ReDim eqTaille(1 To nbEleves)
+    Dim nbEquipes As Long: nbEquipes = 0
+    Dim cursor As Long: cursor = 1
 
-            ' Cas 1: Le projet a de la place
-            If affectesAuProjet.Count < capaciteMax Then
-                affectesAuProjet(eleveActuel) = projetsPrefs(projetVise)(eleveActuel)
-                affectationEleve(eleveActuel) = projetVise
-                estPlace = True
-                Exit For ' L'élève est placé, on sort de sa boucle de choix
+    Do While cursor <= nbEleves
+        nbEquipes = nbEquipes + 1
+        eqDebut(nbEquipes) = cursor
+        Dim restants As Long: restants = nbEleves - cursor + 1
+        Dim taille As Long
+        If restants <= tailleMax Then
+            taille = restants ' Dernière équipe : prend tous les élèves restants
+        Else
+            ' S'assurer que les élèves restants après cette équipe formeront une équipe valide
+            Dim maxT As Long: maxT = restants - tailleMin
+            If maxT > tailleMax Then maxT = tailleMax
+            If maxT < tailleMin Then
+                taille = restants
             Else
-            ' Cas 2: Le projet est plein
-                Dim pireEleve As String: pireEleve = ""
-                Dim rangPireEleve As Long: rangPireEleve = -1
-                Dim eleveAffecte As Variant
-                For Each eleveAffecte In affectesAuProjet.Keys
-                    If affectesAuProjet(eleveAffecte) > rangPireEleve Then
-                        rangPireEleve = affectesAuProjet(eleveAffecte)
-                        pireEleve = eleveAffecte
+                taille = tailleMin + Int((maxT - tailleMin + 1) * Rnd)
+            End If
+        End If
+        eqTaille(nbEquipes) = taille
+        cursor = cursor + taille
+    Loop
+
+    ' Écriture feuille Équipes
+    Dim wsEq As Worksheet: Set wsEq = ThisWorkbook.Sheets("Équipes")
+    wsEq.Cells.Clear
+    wsEq.Cells(1, 1).Value = "Équipe"
+    For i = 1 To tailleMax: wsEq.Cells(1, 1 + i).Value = "Membre " & i: Next i
+    wsEq.Rows(1).Font.Bold = True
+    For i = 1 To nbEquipes
+        wsEq.Cells(i + 1, 1).Value = "Équipe " & i
+        For j = 1 To eqTaille(i)
+            wsEq.Cells(i + 1, 1 + j).Value = "Élève " & elevesShuf(eqDebut(i) + j - 1)
+        Next j
+    Next i
+    wsEq.Columns.AutoFit
+
+    ' ======================================================================
+    ' ÉTAPE 3 : Calcul des préférences d'équipes par vote majoritaire
+    '
+    ' À chaque position, on identifie le premier choix restant de chaque membre
+    ' et le projet avec le plus de votes obtient cette position dans la liste
+    ' de l'équipe. En cas d'égalité, le projet d'indice le plus bas gagne.
+    ' ======================================================================
+    Dim wsPE As Worksheet: Set wsPE = ThisWorkbook.Sheets("Préférences_Équipes")
+    wsPE.Cells.Clear
+    wsPE.Cells(1, 1).Value = "Équipe"
+    For i = 1 To nbProjets: wsPE.Cells(1, 1 + i).Value = "Choix " & i: Next i
+    wsPE.Rows(1).Font.Bold = True
+
+    Dim eq As Long
+    For eq = 1 To nbEquipes
+        wsPE.Cells(eq + 1, 1).Value = "Équipe " & eq
+
+        Dim nbM As Long: nbM = eqTaille(eq)
+        Dim debut As Long: debut = eqDebut(eq)
+
+        ' Préférences de chaque membre : prefsMembres(m, j) = nom du j-ième choix du membre m
+        Dim prefsMembres() As String
+        ReDim prefsMembres(1 To nbM, 1 To nbProjets)
+        For i = 1 To nbM
+            Dim eNum As Long: eNum = elevesShuf(debut + i - 1)
+            For j = 1 To nbProjets: prefsMembres(i, j) = prefsInd(eNum, j): Next j
+        Next i
+
+        ' Vote majoritaire position par position
+        Dim projUsed() As Boolean
+        ReDim projUsed(1 To nbProjets)
+
+        Dim pos As Long
+        For pos = 1 To nbProjets
+            Dim votesP() As Long: ReDim votesP(1 To nbProjets)
+
+            For i = 1 To nbM
+                ' Premier choix restant de ce membre
+                For j = 1 To nbProjets
+                    ' Index du projet : "Projet A"=1, "Projet B"=2, etc.
+                    Dim pIdx As Long: pIdx = Asc(Mid(prefsMembres(i, j), 8, 1)) - 64
+                    If Not projUsed(pIdx) Then
+                        votesP(pIdx) = votesP(pIdx) + 1
+                        Exit For
                     End If
-                Next eleveAffecte
-                
-                Dim rangEleveActuel As Long: rangEleveActuel = projetsPrefs(projetVise)(eleveActuel)
-                
-                If rangEleveActuel < rangPireEleve Then
-                    ' Le nouvel élève est meilleur
-                    affectesAuProjet.Remove pireEleve
-                    affectationEleve(pireEleve) = ""
-                    celibataires.Add pireEleve ' Le pire élève retourne dans la file d'attente
-                    
-                    affectesAuProjet(eleveActuel) = rangEleveActuel
-                    affectationEleve(eleveActuel) = projetVise
-                    estPlace = True
-                    Exit For ' L'élève est placé, on sort de sa boucle de choix
-                ' Else: L'élève est rejeté, la boucle 'For j' continue pour qu'il essaie son choix suivant
-                End If
-            End If
-        Next j ' Passe au choix suivant pour eleveActuel s'il n'est pas encore placé
-    Wend
+                Next j
+            Next i
 
-    ' --- 3. ÉCRITURE DU RÉSULTAT FINAL ---
-    wsResultats.Cells.ClearContents
-    wsResultats.Range("A1:C1").Value = Array("Projet", "Élèves Affectés", "Statut Capacité")
-    wsResultats.Range("A1:C1").Font.Bold = True
-    
-    Dim ligneResultat As Long: ligneResultat = 2
-    Dim projet As Variant
-    For Each projet In affectationsProjet.Keys
-        wsResultats.Cells(ligneResultat, 1).Value = projet
-        
-        Dim listeEleves As String
-        If affectationsProjet(projet).Count > 0 Then
-            listeEleves = Join(affectationsProjet(projet).Keys, ", ")
-        Else
-            listeEleves = "Aucun"
-        End If
-        wsResultats.Cells(ligneResultat, 2).Value = listeEleves
-        wsResultats.Cells(ligneResultat, 2).WrapText = True
-        
-        Dim statut As String
-        Dim nbAffectes As Long: nbAffectes = affectationsProjet(projet).Count
-        Dim capMin As Long: capMin = projetsCapacites(projet)(0)
-        Dim capMax As Long: capMax = projetsCapacites(projet)(1)
-        If nbAffectes < capMin Then
-            statut = "MINIMUM NON ATTEINT (" & nbAffectes & "/" & capMin & ")"
-            wsResultats.Cells(ligneResultat, 3).Interior.Color = vbYellow
-        Else
-            statut = "OK (" & nbAffectes & "/" & capMax & ")"
-            wsResultats.Cells(ligneResultat, 3).Interior.ColorIndex = xlNone
-        End If
-        wsResultats.Cells(ligneResultat, 3).Value = statut
-        
-        ligneResultat = ligneResultat + 1
-    Next projet
-    
-    wsResultats.Columns.AutoFit
-    
-    Application.ScreenUpdating = True
-    MsgBox "L'affectation des élèves aux projets est terminée. Consultez la feuille 'Résultats'.", vbInformation
-End Sub
-
-
-
-'****************************************************************************************
-' Pour test , à effacer
-' Corrige l'erreur 450 en utilisant le mot-clé 'Set' pour les affectations d'objets.
-'****************************************************************************************
-
-Sub TestArrayList()
-    Dim testList As Object
-    On Error Resume Next ' Continue même si une erreur se produit
-
-    ' Tente de créer l'objet
-    Set testList = CreateObject("System.Collections.ArrayList")
-
-    ' Vérifie si une erreur s'est produite
-    If Err.Number <> 0 Then
-        MsgBox "ERREUR : Le composant 'System.Collections.ArrayList' n'est PAS disponible sur votre système.", vbCritical
-    Else
-        MsgBox "SUCCÈS : Le composant 'System.Collections.ArrayList' est bien disponible. Le problème est ailleurs.", vbInformation
-    End If
-End Sub
-
-
-Option Explicit ' Force la déclaration de toutes les variables, une bonne pratique.
-
-'****************************************************************************************
-' MACRO 4 : ANALYSE DE LA SATISFACTION (avec Moyenne et Écart-Type)
-'****************************************************************************************
-Sub RapportSatisfactionEleves()
-
-    ' Déclaration des feuilles
-    Dim wsResultats As Worksheet, wsPrefsEleves As Worksheet, wsRapport As Worksheet
-    
-    ' Structures de données
-    Dim affectations As Object, prefsEleves As Object
-    Dim rangsObtenus As Collection ' Pour stocker les rangs pour le calcul de l'écart-type
-    
-    ' Variables de boucle et de travail
-    Dim i As Long, j As Long, eleve As Variant, prefsList As Collection
-    
-    ' Initialisation
-    Set affectations = CreateObject("Scripting.Dictionary")
-    Set prefsEleves = CreateObject("Scripting.Dictionary")
-    Set rangsObtenus = New Collection
-
-    ' --- Association des feuilles ---
-    On Error Resume Next
-    Set wsResultats = ThisWorkbook.Sheets("Résultats")
-    Set wsPrefsEleves = ThisWorkbook.Sheets("Préférences_Élèves")
-    Set wsRapport = ThisWorkbook.Sheets("Rapport_Satisfaction")
-    If wsResultats Is Nothing Or wsPrefsEleves Is Nothing Or wsRapport Is Nothing Then
-        MsgBox "Erreur : Assurez-vous que les feuilles 'Résultats', 'Préférences_Élèves' et 'Rapport_Satisfaction' existent.", vbCritical
-        Exit Sub
-    End If
-    On Error GoTo 0
-    
-    Application.ScreenUpdating = False
-
-    ' --- 1. LECTURE DES RÉSULTATS ---
-    Dim derniereLigneR As Long
-    derniereLigneR = wsResultats.Cells(wsResultats.Rows.Count, "A").End(xlUp).Row
-    For i = 2 To derniereLigneR
-        Dim projetAffecte As String: projetAffecte = wsResultats.Cells(i, 1).Value
-        Dim listeElevesStr As String: listeElevesStr = wsResultats.Cells(i, 2).Value
-        If listeElevesStr <> "Aucun" And listeElevesStr <> "" Then
-            Dim elevesAffectesArray As Variant: elevesAffectesArray = Split(listeElevesStr, ", ")
-            For Each eleve In elevesAffectesArray
-                affectations(eleve) = projetAffecte
-            Next eleve
-        End If
-    Next i
-    
-    ' --- 2. LECTURE DES PRÉFÉRENCES ---
-    Dim derniereLigneE As Long
-    derniereLigneE = wsPrefsEleves.Cells(wsPrefsEleves.Rows.Count, "A").End(xlUp).Row
-    For i = 2 To derniereLigneE
-        Dim nomEleve As String: nomEleve = wsPrefsEleves.Cells(i, 1).Value
-        If nomEleve <> "" Then
-            Set prefsList = New Collection
-            Dim derniereColE As Long
-            derniereColE = wsPrefsEleves.Cells(i, wsPrefsEleves.Columns.Count).End(xlToLeft).Column
-            For j = 2 To derniereColE
-                prefsList.Add wsPrefsEleves.Cells(i, j).Value
-            Next j
-            Set prefsEleves(nomEleve) = prefsList
-        End If
-    Next i
-    
-    ' --- 3. GÉNÉRATION DU RAPPORT ---
-    wsRapport.Cells.ClearContents
-    wsRapport.Range("A1:C1").Value = Array("Élève", "Projet Affecté", "Rang du Choix")
-    wsRapport.Range("A1:C1").Font.Bold = True
-    
-    Dim ligneRapport As Long: ligneRapport = 2
-    
-    For Each eleve In prefsEleves.Keys
-        wsRapport.Cells(ligneRapport, 1).Value = eleve
-        If affectations.Exists(eleve) Then
-            Dim projetObtenu As String: projetObtenu = affectations(eleve)
-            wsRapport.Cells(ligneRapport, 2).Value = projetObtenu
-            Dim rang As Long: rang = 0
-            Set prefsList = prefsEleves(eleve)
-            For j = 1 To prefsList.Count
-                If prefsList(j) = projetObtenu Then
-                    rang = j
-                    Exit For
+            ' Projet gagnant : le plus de votes (ex-aequo : indice le plus bas)
+            Dim maxV As Long: maxV = -1
+            Dim winner As Long: winner = 0
+            For j = 1 To nbProjets
+                If Not projUsed(j) And votesP(j) > maxV Then
+                    maxV = votesP(j): winner = j
                 End If
             Next j
-            If rang > 0 Then
-                wsRapport.Cells(ligneRapport, 3).Value = rang
-                rangsObtenus.Add rang ' Ajoute le rang à notre collection pour les calculs stats
-            Else
-                wsRapport.Cells(ligneRapport, 3).Value = "Erreur: Projet non trouvé"
-            End If
-        Else
-            wsRapport.Cells(ligneRapport, 2).Value = "Non affecté"
-            wsRapport.Cells(ligneRapport, 3).Value = "N/A"
-        End If
-        ligneRapport = ligneRapport + 1
-    Next eleve
-    
-    ' --- 4. AFFICHAGE DES STATISTIQUES ---
-    If rangsObtenus.Count > 0 Then
-        ' Calcul de la moyenne
-        Dim sommeRangs As Double: sommeRangs = 0
-        Dim rangItem As Variant
-        For Each rangItem In rangsObtenus
-            sommeRangs = sommeRangs + rangItem
-        Next rangItem
-        Dim rangMoyen As Double: rangMoyen = sommeRangs / rangsObtenus.Count
-        
-        ' Calcul de l'écart-type
-        Dim sommeCarresEcarts As Double: sommeCarresEcarts = 0
-        For Each rangItem In rangsObtenus
-            sommeCarresEcarts = sommeCarresEcarts + (rangItem - rangMoyen) ^ 2
-        Next rangItem
-        Dim ecartType As Double
-        If rangsObtenus.Count > 1 Then
-            ecartType = Sqr(sommeCarresEcarts / (rangsObtenus.Count - 1)) ' Écart-type d'échantillon (le plus courant)
-        Else
-            ecartType = 0 ' Pas de dispersion avec une seule valeur
-        End If
 
-        ' Affichage dans la feuille
-        ligneRapport = ligneRapport + 1 ' Laisse une ligne vide
-        wsRapport.Cells(ligneRapport, "B").Value = "Satisfaction moyenne :"
-        wsRapport.Cells(ligneRapport, "C").Value = Round(rangMoyen, 2)
-        
-        ligneRapport = ligneRapport + 1
-        wsRapport.Cells(ligneRapport, "B").Value = "Écart-type des rangs :"
-        wsRapport.Cells(ligneRapport, "C").Value = Round(ecartType, 2)
-        
-        wsRapport.Range(wsRapport.Cells(ligneRapport - 1, "B"), wsRapport.Cells(ligneRapport, "C")).Font.Bold = True
-    End If
-    
-    wsRapport.Columns.AutoFit
+            wsPE.Cells(eq + 1, 1 + pos).Value = "Projet " & Chr(64 + winner)
+            projUsed(winner) = True
+        Next pos
+    Next eq
+    wsPE.Columns.AutoFit
+
+    ' ======================================================================
+    ' ÉTAPE 4 : Feuille Préférences_Projets
+    '
+    ' Colonnes : Projet | MinEquipes | MaxEquipes | TailleMinEquipe | TailleMaxEquipe | Eq1 | Eq2 ...
+    '
+    ' Classement de chaque équipe par un projet = moyenne du rang que les membres
+    ' accordent à ce projet dans leur liste individuelle (score bas = équipe enthousiaste).
+    ' ======================================================================
+    Dim wsP As Worksheet: Set wsP = ThisWorkbook.Sheets("Préférences_Projets")
+    wsP.Cells.Clear
+    wsP.Cells(1, 1).Value = "Projet"
+    wsP.Cells(1, 2).Value = "MinEquipes"
+    wsP.Cells(1, 3).Value = "MaxEquipes"
+    wsP.Cells(1, 4).Value = "TailleMinEquipe"
+    wsP.Cells(1, 5).Value = "TailleMaxEquipe"
+    For eq = 1 To nbEquipes: wsP.Cells(1, 5 + eq).Value = "Équipe " & eq: Next eq
+    wsP.Rows(1).Font.Bold = True
+
+    For i = 1 To nbProjets
+        wsP.Cells(i + 1, 1).Value = "Projet " & Chr(64 + i)
+        Dim minEq As Long: minEq = Application.WorksheetFunction.RandBetween(1, 2)
+        Dim maxEq As Long: maxEq = Application.WorksheetFunction.RandBetween(minEq, minEq + 2)
+        wsP.Cells(i + 1, 2).Value = minEq
+        wsP.Cells(i + 1, 3).Value = maxEq
+        wsP.Cells(i + 1, 4).Value = tailleMin    ' Le projet accepte des équipes de taille comprise
+        wsP.Cells(i + 1, 5).Value = tailleMax    ' dans la fourchette globale de génération
+
+        ' Calcul des scores : score(eq) = moyenne du rang du projet chez les membres de eq
+        Dim scores() As Double: ReDim scores(1 To nbEquipes)
+        Dim projetNom As String: projetNom = "Projet " & Chr(64 + i)
+        For eq = 1 To nbEquipes
+            Dim scoreTotal As Double: scoreTotal = 0
+            For j = 1 To eqTaille(eq)
+                Dim eNo As Long: eNo = elevesShuf(eqDebut(eq) + j - 1)
+                For k = 1 To nbProjets
+                    If prefsInd(eNo, k) = projetNom Then
+                        scoreTotal = scoreTotal + k: Exit For
+                    End If
+                Next k
+            Next j
+            scores(eq) = scoreTotal / eqTaille(eq)
+        Next eq
+
+        ' Attribution des rangs (rang 1 = score le plus bas = équipe la plus enthousiaste)
+        ' Ex-aequo : le même rang est attribué (le rang suivant est donc sauté)
+        Dim rangs() As Long: ReDim rangs(1 To nbEquipes)
+        For eq = 1 To nbEquipes
+            Dim rang As Long: rang = 1
+            For k = 1 To nbEquipes
+                If scores(k) < scores(eq) Then rang = rang + 1
+            Next k
+            rangs(eq) = rang
+        Next eq
+        For eq = 1 To nbEquipes: wsP.Cells(i + 1, 5 + eq).Value = rangs(eq): Next eq
+    Next i
+    wsP.Columns.AutoFit
+
     Application.ScreenUpdating = True
-    
-    MsgBox "Le rapport de satisfaction des élèves (avec moyenne et écart-type) a été généré.", vbInformation
+    MsgBox nbEleves & " élèves répartis en " & nbEquipes & " équipes, " & nbProjets & " projets générés.", vbInformation
 
 End Sub
 
-'****************************************************************************************
-' MACRO 5 : AFFECTATION PAS À PAS (Version Finale avec Correction de Lecture)
-'****************************************************************************************
-Sub AffectationPasAPas()
 
-    ' Déclaration des feuilles
-    Dim wsEleves As Worksheet, wsProjets As Worksheet, wsResultats As Worksheet, wsLog As Worksheet
-    
-    ' Structures de données
-    Dim elevesPrefs As Object, projetsPrefs As Object, projetsCapacites As Object
-    Dim affectationsProjet As Object, affectationEleve As Object
-    Dim celibataires As Collection, propositionsFaites As Object
-    
-    ' Initialisation
-    Set elevesPrefs = CreateObject("Scripting.Dictionary")
-    Set projetsPrefs = CreateObject("Scripting.Dictionary")
-    Set projetsCapacites = CreateObject("Scripting.Dictionary")
-    Set affectationsProjet = CreateObject("Scripting.Dictionary")
-    Set affectationEleve = CreateObject("Scripting.Dictionary")
-    Set celibataires = New Collection
-    Set propositionsFaites = CreateObject("Scripting.Dictionary")
+'================================================================================================
+' MACRO 2 : AFFECTATION DES ÉQUIPES AUX PROJETS (Gale-Shapley)
+'
+' Feuilles lues    : Équipes, Préférences_Équipes, Préférences_Projets
+' Feuille écrite   : Résultats
+'================================================================================================
+Sub AffectationEquipesProjets()
 
-    ' --- Association des feuilles ---
+    Dim wsEq As Worksheet, wsPE As Worksheet, wsP As Worksheet, wsR As Worksheet
+
     On Error Resume Next
-    Set wsEleves = ThisWorkbook.Sheets("Préférences_Élèves")
-    Set wsProjets = ThisWorkbook.Sheets("Préférences_Projets")
-    Set wsResultats = ThisWorkbook.Sheets("Résultats")
-    Set wsLog = ThisWorkbook.Sheets("Log_Affectation")
-    If wsEleves Is Nothing Or wsProjets Is Nothing Or wsResultats Is Nothing Or wsLog Is Nothing Then
-        MsgBox "Erreur : Assurez-vous que toutes les feuilles nécessaires existent.", vbCritical
-        Exit Sub
+    Set wsEq = ThisWorkbook.Sheets("Équipes")
+    Set wsPE = ThisWorkbook.Sheets("Préférences_Équipes")
+    Set wsP  = ThisWorkbook.Sheets("Préférences_Projets")
+    Set wsR  = ThisWorkbook.Sheets("Résultats")
+    If wsEq Is Nothing Or wsPE Is Nothing Or wsP Is Nothing Or wsR Is Nothing Then
+        MsgBox "Erreur : une ou plusieurs feuilles manquantes.", vbCritical: Exit Sub
     End If
     On Error GoTo 0
-    
-    Application.ScreenUpdating = False
-    
-    ' --- Préparation du journal ---
-    Dim ligneLog As Long: ligneLog = 1
-    wsLog.Cells.Clear
-    wsLog.Range("A1:E1").Value = Array("Étape", "Action de l'Élève", "Décision du Projet", "Statut du Projet", "Élèves libres")
-    wsLog.Range("A1:E1").Font.Bold = True
 
-    ' --- 1. LECTURE SÉCURISÉE DES DONNÉES (CORRIGÉE) ---
+    Application.ScreenUpdating = False
+
     Dim i As Long, j As Long
-    Dim prefsList As Collection ' Déclarée une seule fois ici
-    
-    ' Lecture Élèves
-    For i = 2 To wsEleves.Cells(wsEleves.Rows.Count, "A").End(xlUp).Row
-        Dim nomEleve As String: nomEleve = Trim(wsEleves.Cells(i, 1).Value)
-        If nomEleve <> "" Then
-            celibataires.Add nomEleve
-            affectationEleve(nomEleve) = ""
-            propositionsFaites(nomEleve) = 0
-            
-            ' CORRECTION CRUCIALE : On force la création d'une NOUVELLE liste pour chaque élève
-            Set prefsList = New Collection
-            
-            For j = 2 To wsEleves.Cells(i, wsEleves.Columns.Count).End(xlToLeft).Column
-                prefsList.Add Trim(wsEleves.Cells(i, j).Value)
-            Next j
-            Set elevesPrefs(nomEleve) = prefsList
-        End If
-    Next i
-    
-    ' Lecture Projets
-    For i = 2 To wsProjets.Cells(wsProjets.Rows.Count, "A").End(xlUp).Row
-        Dim nomProjet As String: nomProjet = Trim(wsProjets.Cells(i, 1).Value)
-        If nomProjet <> "" Then
-            projetsCapacites(nomProjet) = Array(wsProjets.Cells(i, 2).Value, wsProjets.Cells(i, 3).Value)
-            Set affectationsProjet(nomProjet) = CreateObject("Scripting.Dictionary")
-            Dim rangsDict As Object: Set rangsDict = CreateObject("Scripting.Dictionary")
-            For j = 4 To wsProjets.Cells(1, wsProjets.Columns.Count).End(xlToLeft).Column
-                rangsDict(Trim(wsProjets.Cells(1, j).Value)) = wsProjets.Cells(i, j).Value
-            Next j
-            Set projetsPrefs(nomProjet) = rangsDict
-        End If
-    Next i
-    
-    ' --- 2. EXÉCUTION DE L'ALGORITHME (LOGIQUE STANDARD) ---
-    While celibataires.Count > 0
-        Dim eleveActuel As String: eleveActuel = celibataires(1)
-        Dim indexProposition As Long: indexProposition = propositionsFaites(eleveActuel) + 1
-        
-        If indexProposition > elevesPrefs(eleveActuel).Count Then
-            celibataires.Remove 1
-            LogStep wsLog, ligneLog, eleveActuel & " a épuisé sa liste de vœux.", "Reste non affecté.", "", GetCelibatairesString(celibataires)
-        Else
-            Dim projetVise As String: projetVise = elevesPrefs(eleveActuel)(indexProposition)
-            propositionsFaites(eleveActuel) = indexProposition
-            
-            Dim action As String: action = eleveActuel & " propose au " & projetVise & " (son choix n°" & indexProposition & ")."
-            Dim decision As String, statut As String
-            
-            Dim affectesAuProjet As Object: Set affectesAuProjet = affectationsProjet(projetVise)
-            Dim capaciteMax As Long: capaciteMax = projetsCapacites(projetVise)(1)
 
-            If affectesAuProjet.Count < capaciteMax Then
-                decision = "Le projet a de la place. ACCEPTATION PROVISOIRE."
-                affectesAuProjet(eleveActuel) = projetsPrefs(projetVise)(eleveActuel)
-                affectationEleve(eleveActuel) = projetVise
+    ' ---- Lecture des tailles d'équipes ----
+    Dim equipesTaille As Object: Set equipesTaille = CreateObject("Scripting.Dictionary")
+    For i = 2 To wsEq.Cells(wsEq.Rows.Count, "A").End(xlUp).Row
+        Dim nomEq As String: nomEq = Trim(wsEq.Cells(i, 1).Value)
+        If nomEq <> "" Then
+            Dim taille As Long: taille = 0
+            For j = 2 To wsEq.Cells(i, wsEq.Columns.Count).End(xlToLeft).Column
+                If Trim(wsEq.Cells(i, j).Value) <> "" Then taille = taille + 1
+            Next j
+            equipesTaille(nomEq) = taille
+        End If
+    Next i
+
+    ' ---- Lecture des données projets ----
+    Dim projetsMinEq As Object:     Set projetsMinEq     = CreateObject("Scripting.Dictionary")
+    Dim projetsMaxEq As Object:     Set projetsMaxEq     = CreateObject("Scripting.Dictionary")
+    Dim projetsTailleMin As Object: Set projetsTailleMin  = CreateObject("Scripting.Dictionary")
+    Dim projetsTailleMax As Object: Set projetsTailleMax  = CreateObject("Scripting.Dictionary")
+    Dim projetsRangs As Object:     Set projetsRangs     = CreateObject("Scripting.Dictionary")
+    Dim affectationsProjet As Object: Set affectationsProjet = CreateObject("Scripting.Dictionary")
+
+    Dim lastCol As Long: lastCol = wsP.Cells(1, wsP.Columns.Count).End(xlToLeft).Column
+    For i = 2 To wsP.Cells(wsP.Rows.Count, "A").End(xlUp).Row
+        Dim nomP As String: nomP = Trim(wsP.Cells(i, 1).Value)
+        If nomP <> "" Then
+            projetsMinEq(nomP)     = CLng(wsP.Cells(i, 2).Value)
+            projetsMaxEq(nomP)     = CLng(wsP.Cells(i, 3).Value)
+            projetsTailleMin(nomP)  = CLng(wsP.Cells(i, 4).Value)
+            projetsTailleMax(nomP)  = CLng(wsP.Cells(i, 5).Value)
+            Dim rangsDict As Object: Set rangsDict = CreateObject("Scripting.Dictionary")
+            For j = 6 To lastCol
+                Dim eqH As String: eqH = Trim(wsP.Cells(1, j).Value)
+                If eqH <> "" Then rangsDict(eqH) = CLng(wsP.Cells(i, j).Value)
+            Next j
+            Set projetsRangs(nomP) = rangsDict
+            Set affectationsProjet(nomP) = CreateObject("Scripting.Dictionary")
+        End If
+    Next i
+
+    ' ---- Lecture des préférences + pré-filtrage des incompatibilités de taille ----
+    ' Les projets incompatibles avec la taille de l'équipe sont retirés dès la lecture.
+    Dim equipePrefs As Object:        Set equipePrefs       = CreateObject("Scripting.Dictionary")
+    Dim celibataires As New Collection
+    Dim propositionsFaites As Object: Set propositionsFaites = CreateObject("Scripting.Dictionary")
+    Dim affectationEquipe As Object:  Set affectationEquipe  = CreateObject("Scripting.Dictionary")
+
+    For i = 2 To wsPE.Cells(wsPE.Rows.Count, "A").End(xlUp).Row
+        nomEq = Trim(wsPE.Cells(i, 1).Value)
+        If nomEq <> "" Then
+            Dim tEq As Long: tEq = equipesTaille(nomEq)
+            Dim prefsFiltrees As New Collection
+            For j = 2 To wsPE.Cells(i, wsPE.Columns.Count).End(xlToLeft).Column
+                Dim pNom As String: pNom = Trim(wsPE.Cells(i, j).Value)
+                If projetsTailleMin.Exists(pNom) Then
+                    If tEq >= projetsTailleMin(pNom) And tEq <= projetsTailleMax(pNom) Then
+                        prefsFiltrees.Add pNom
+                    End If
+                End If
+            Next j
+            Set equipePrefs(nomEq) = prefsFiltrees
+            celibataires.Add nomEq
+            affectationEquipe(nomEq) = ""
+            propositionsFaites(nomEq) = 0
+        End If
+    Next i
+
+    ' ---- Algorithme de Gale-Shapley sur les équipes ----
+    While celibataires.Count > 0
+        Dim equipeActuelle As String: equipeActuelle = celibataires(1)
+        Dim indexProp As Long: indexProp = propositionsFaites(equipeActuelle) + 1
+
+        If indexProp > equipePrefs(equipeActuelle).Count Then
+            ' L'équipe a épuisé tous ses vœux compatibles : reste non affectée
+            celibataires.Remove 1
+        Else
+            Dim projetVise As String: projetVise = equipePrefs(equipeActuelle)(indexProp)
+            propositionsFaites(equipeActuelle) = indexProp
+
+            Dim affectesAuProjet As Object: Set affectesAuProjet = affectationsProjet(projetVise)
+            Dim maxEqP As Long: maxEqP = projetsMaxEq(projetVise)
+
+            If affectesAuProjet.Count < maxEqP Then
+                ' Place disponible : acceptation provisoire
+                affectesAuProjet(equipeActuelle) = projetsRangs(projetVise)(equipeActuelle)
+                affectationEquipe(equipeActuelle) = projetVise
                 celibataires.Remove 1
             Else
-                Dim pireEleve As String: pireEleve = ""
-                Dim rangPireEleve As Long: rangPireEleve = -1
-                Dim eleveAffecte As Variant
-                For Each eleveAffecte In affectesAuProjet.Keys
-                    If affectesAuProjet(eleveAffecte) > rangPireEleve Then
-                        rangPireEleve = affectesAuProjet(eleveAffecte)
-                        pireEleve = eleveAffecte
+                ' Projet plein : chercher la pire équipe actuellement acceptée
+                Dim pireEquipe As String: pireEquipe = ""
+                Dim rangPire As Long: rangPire = -1
+                Dim eAff As Variant
+                For Each eAff In affectesAuProjet.Keys
+                    If affectesAuProjet(eAff) > rangPire Then
+                        rangPire = affectesAuProjet(eAff): pireEquipe = eAff
                     End If
-                Next eleveAffecte
-                
-                Dim rangEleveActuel As Long: rangEleveActuel = projetsPrefs(projetVise)(eleveActuel)
-                
-                If rangEleveActuel < rangPireEleve Then
-                    decision = "Le projet est plein. " & eleveActuel & " est meilleur que " & pireEleve & ". ACCEPTATION et ÉVICTION."
-                    affectesAuProjet.Remove pireEleve
-                    affectationEleve(pireEleve) = ""
-                    celibataires.Add pireEleve
-                    affectesAuProjet(eleveActuel) = rangEleveActuel
-                    affectationEleve(eleveActuel) = projetVise
+                Next eAff
+
+                Dim rangNouvelle As Long: rangNouvelle = projetsRangs(projetVise)(equipeActuelle)
+
+                If rangNouvelle < rangPire Then
+                    ' La nouvelle équipe est mieux classée : éviction
+                    affectesAuProjet.Remove pireEquipe
+                    affectationEquipe(pireEquipe) = ""
+                    celibataires.Add pireEquipe
+                    affectesAuProjet(equipeActuelle) = rangNouvelle
+                    affectationEquipe(equipeActuelle) = projetVise
                     celibataires.Remove 1
                 Else
-                    decision = "Le projet est plein. " & eleveActuel & " n'est pas meilleur. REJET."
+                    ' Rejet : l'équipe réessaiera avec son prochain choix
                     celibataires.Remove 1
-                    celibataires.Add eleveActuel
+                    celibataires.Add equipeActuelle
                 End If
             End If
-            
-            statut = projetVise & ": " & Join(affectationsProjet(projetVise).Keys, ", ")
+        End If
+    Wend
+
+    ' ---- Écriture des résultats ----
+    wsR.Cells.ClearContents
+    wsR.Range("A1:C1").Value = Array("Projet", "Équipes Affectées", "Statut Capacité")
+    wsR.Range("A1:C1").Font.Bold = True
+    Dim ligneR As Long: ligneR = 2
+    Dim projet As Variant
+    For Each projet In affectationsProjet.Keys
+        wsR.Cells(ligneR, 1).Value = projet
+        Dim listeEq As String
+        listeEq = IIf(affectationsProjet(projet).Count > 0, Join(affectationsProjet(projet).Keys, ", "), "Aucune")
+        wsR.Cells(ligneR, 2).Value = listeEq
+        wsR.Cells(ligneR, 2).WrapText = True
+        Dim nbAff As Long: nbAff = affectationsProjet(projet).Count
+        If nbAff < projetsMinEq(projet) Then
+            wsR.Cells(ligneR, 3).Value = "MINIMUM NON ATTEINT (" & nbAff & "/" & projetsMinEq(projet) & " équipes)"
+            wsR.Cells(ligneR, 3).Interior.Color = vbYellow
+        Else
+            wsR.Cells(ligneR, 3).Value = "OK (" & nbAff & "/" & projetsMaxEq(projet) & " équipes)"
+            wsR.Cells(ligneR, 3).Interior.ColorIndex = xlNone
+        End If
+        ligneR = ligneR + 1
+    Next projet
+    wsR.Columns.AutoFit
+
+    Application.ScreenUpdating = True
+    MsgBox "Affectation des équipes aux projets terminée. Consultez la feuille 'Résultats'.", vbInformation
+
+End Sub
+
+
+'================================================================================================
+' MACRO 3 : AFFECTATION PAS À PAS (avec journal dans Log_Affectation)
+'================================================================================================
+Sub AffectationEquipesPasAPas()
+
+    Dim wsEq As Worksheet, wsPE As Worksheet, wsP As Worksheet, wsR As Worksheet, wsLog As Worksheet
+
+    On Error Resume Next
+    Set wsEq  = ThisWorkbook.Sheets("Équipes")
+    Set wsPE  = ThisWorkbook.Sheets("Préférences_Équipes")
+    Set wsP   = ThisWorkbook.Sheets("Préférences_Projets")
+    Set wsR   = ThisWorkbook.Sheets("Résultats")
+    Set wsLog = ThisWorkbook.Sheets("Log_Affectation")
+    If wsEq Is Nothing Or wsPE Is Nothing Or wsP Is Nothing Or wsR Is Nothing Or wsLog Is Nothing Then
+        MsgBox "Erreur : feuilles manquantes.", vbCritical: Exit Sub
+    End If
+    On Error GoTo 0
+
+    Application.ScreenUpdating = False
+
+    wsLog.Cells.Clear
+    wsLog.Range("A1:E1").Value = Array("Étape", "Action de l'Équipe", "Décision du Projet", "Statut du Projet", "Équipes libres")
+    wsLog.Range("A1:E1").Font.Bold = True
+    Dim ligneLog As Long: ligneLog = 1
+
+    Dim i As Long, j As Long
+
+    ' ---- Lecture des tailles d'équipes ----
+    Dim equipesTaille As Object: Set equipesTaille = CreateObject("Scripting.Dictionary")
+    For i = 2 To wsEq.Cells(wsEq.Rows.Count, "A").End(xlUp).Row
+        Dim nomEq As String: nomEq = Trim(wsEq.Cells(i, 1).Value)
+        If nomEq <> "" Then
+            Dim taille As Long: taille = 0
+            For j = 2 To wsEq.Cells(i, wsEq.Columns.Count).End(xlToLeft).Column
+                If Trim(wsEq.Cells(i, j).Value) <> "" Then taille = taille + 1
+            Next j
+            equipesTaille(nomEq) = taille
+        End If
+    Next i
+
+    ' ---- Lecture des données projets ----
+    Dim projetsMinEq As Object:     Set projetsMinEq     = CreateObject("Scripting.Dictionary")
+    Dim projetsMaxEq As Object:     Set projetsMaxEq     = CreateObject("Scripting.Dictionary")
+    Dim projetsTailleMin As Object: Set projetsTailleMin  = CreateObject("Scripting.Dictionary")
+    Dim projetsTailleMax As Object: Set projetsTailleMax  = CreateObject("Scripting.Dictionary")
+    Dim projetsRangs As Object:     Set projetsRangs     = CreateObject("Scripting.Dictionary")
+    Dim affectationsProjet As Object: Set affectationsProjet = CreateObject("Scripting.Dictionary")
+
+    Dim lastCol As Long: lastCol = wsP.Cells(1, wsP.Columns.Count).End(xlToLeft).Column
+    For i = 2 To wsP.Cells(wsP.Rows.Count, "A").End(xlUp).Row
+        Dim nomP As String: nomP = Trim(wsP.Cells(i, 1).Value)
+        If nomP <> "" Then
+            projetsMinEq(nomP)     = CLng(wsP.Cells(i, 2).Value)
+            projetsMaxEq(nomP)     = CLng(wsP.Cells(i, 3).Value)
+            projetsTailleMin(nomP)  = CLng(wsP.Cells(i, 4).Value)
+            projetsTailleMax(nomP)  = CLng(wsP.Cells(i, 5).Value)
+            Dim rangsDict As Object: Set rangsDict = CreateObject("Scripting.Dictionary")
+            For j = 6 To lastCol
+                Dim eqH As String: eqH = Trim(wsP.Cells(1, j).Value)
+                If eqH <> "" Then rangsDict(eqH) = CLng(wsP.Cells(i, j).Value)
+            Next j
+            Set projetsRangs(nomP) = rangsDict
+            Set affectationsProjet(nomP) = CreateObject("Scripting.Dictionary")
+        End If
+    Next i
+
+    ' ---- Lecture des préférences + pré-filtrage des incompatibilités de taille ----
+    Dim equipePrefs As Object:        Set equipePrefs       = CreateObject("Scripting.Dictionary")
+    Dim celibataires As New Collection
+    Dim propositionsFaites As Object: Set propositionsFaites = CreateObject("Scripting.Dictionary")
+    Dim affectationEquipe As Object:  Set affectationEquipe  = CreateObject("Scripting.Dictionary")
+
+    For i = 2 To wsPE.Cells(wsPE.Rows.Count, "A").End(xlUp).Row
+        nomEq = Trim(wsPE.Cells(i, 1).Value)
+        If nomEq <> "" Then
+            Dim tEq As Long: tEq = equipesTaille(nomEq)
+            Dim prefsFiltrees As New Collection
+            For j = 2 To wsPE.Cells(i, wsPE.Columns.Count).End(xlToLeft).Column
+                Dim pNom As String: pNom = Trim(wsPE.Cells(i, j).Value)
+                If projetsTailleMin.Exists(pNom) Then
+                    If tEq >= projetsTailleMin(pNom) And tEq <= projetsTailleMax(pNom) Then
+                        prefsFiltrees.Add pNom
+                    End If
+                End If
+            Next j
+            Set equipePrefs(nomEq) = prefsFiltrees
+            celibataires.Add nomEq
+            affectationEquipe(nomEq) = ""
+            propositionsFaites(nomEq) = 0
+        End If
+    Next i
+
+    ' ---- Algorithme de Gale-Shapley avec journalisation ----
+    While celibataires.Count > 0
+        Dim equipeActuelle As String: equipeActuelle = celibataires(1)
+        Dim indexProp As Long: indexProp = propositionsFaites(equipeActuelle) + 1
+
+        If indexProp > equipePrefs(equipeActuelle).Count Then
+            celibataires.Remove 1
+            LogStep wsLog, ligneLog, equipeActuelle & " a épuisé sa liste de vœux.", "Reste non affectée.", "", GetCelibatairesString(celibataires)
+        Else
+            Dim projetVise As String: projetVise = equipePrefs(equipeActuelle)(indexProp)
+            propositionsFaites(equipeActuelle) = indexProp
+
+            Dim action As String:   action   = equipeActuelle & " propose au " & projetVise & " (choix n°" & indexProp & ")."
+            Dim decision As String: decision = ""
+            Dim statut As String:   statut   = ""
+
+            Dim affectesAuProjet As Object: Set affectesAuProjet = affectationsProjet(projetVise)
+            Dim maxEqP As Long: maxEqP = projetsMaxEq(projetVise)
+
+            If affectesAuProjet.Count < maxEqP Then
+                decision = "Le projet a de la place. ACCEPTATION PROVISOIRE."
+                affectesAuProjet(equipeActuelle) = projetsRangs(projetVise)(equipeActuelle)
+                affectationEquipe(equipeActuelle) = projetVise
+                celibataires.Remove 1
+            Else
+                Dim pireEquipe As String: pireEquipe = ""
+                Dim rangPire As Long: rangPire = -1
+                Dim eAff As Variant
+                For Each eAff In affectesAuProjet.Keys
+                    If affectesAuProjet(eAff) > rangPire Then
+                        rangPire = affectesAuProjet(eAff): pireEquipe = eAff
+                    End If
+                Next eAff
+
+                Dim rangNouvelle As Long: rangNouvelle = projetsRangs(projetVise)(equipeActuelle)
+
+                If rangNouvelle < rangPire Then
+                    decision = "Plein. " & equipeActuelle & " est mieux classée que " & pireEquipe & ". ACCEPTATION et ÉVICTION."
+                    affectesAuProjet.Remove pireEquipe
+                    affectationEquipe(pireEquipe) = ""
+                    celibataires.Add pireEquipe
+                    affectesAuProjet(equipeActuelle) = rangNouvelle
+                    affectationEquipe(equipeActuelle) = projetVise
+                    celibataires.Remove 1
+                Else
+                    decision = "Plein. " & equipeActuelle & " n'est pas mieux classée. REJET."
+                    celibataires.Remove 1
+                    celibataires.Add equipeActuelle
+                End If
+            End If
+
+            statut = projetVise & ": [" & Join(affectationsProjet(projetVise).Keys, ", ") & "]"
             LogStep wsLog, ligneLog, action, decision, statut, GetCelibatairesString(celibataires)
         End If
     Wend
 
-    ' --- 3. ÉCRITURE DU RÉSULTAT FINAL ---
-    wsResultats.Cells.ClearContents
-    wsResultats.Range("A1:C1").Value = Array("Projet", "Élèves Affectés", "Statut Capacité")
-    wsResultats.Range("A1:C1").Font.Bold = True
-    Dim ligneResultat As Long: ligneResultat = 2
+    ' ---- Écriture des résultats ----
+    wsR.Cells.ClearContents
+    wsR.Range("A1:C1").Value = Array("Projet", "Équipes Affectées", "Statut Capacité")
+    wsR.Range("A1:C1").Font.Bold = True
+    Dim ligneR As Long: ligneR = 2
     Dim projet As Variant
     For Each projet In affectationsProjet.Keys
-        wsResultats.Cells(ligneResultat, 1).Value = projet
-        Dim listeEleves As String
-        If affectationsProjet(projet).Count > 0 Then
-            listeEleves = Join(affectationsProjet(projet).Keys, ", ")
+        wsR.Cells(ligneR, 1).Value = projet
+        Dim listeEq As String
+        listeEq = IIf(affectationsProjet(projet).Count > 0, Join(affectationsProjet(projet).Keys, ", "), "Aucune")
+        wsR.Cells(ligneR, 2).Value = listeEq
+        wsR.Cells(ligneR, 2).WrapText = True
+        Dim nbAff As Long: nbAff = affectationsProjet(projet).Count
+        If nbAff < projetsMinEq(projet) Then
+            wsR.Cells(ligneR, 3).Value = "MINIMUM NON ATTEINT (" & nbAff & "/" & projetsMinEq(projet) & " équipes)"
+            wsR.Cells(ligneR, 3).Interior.Color = vbYellow
         Else
-            listeEleves = "Aucun"
+            wsR.Cells(ligneR, 3).Value = "OK (" & nbAff & "/" & projetsMaxEq(projet) & " équipes)"
+            wsR.Cells(ligneR, 3).Interior.ColorIndex = xlNone
         End If
-        wsResultats.Cells(ligneResultat, 2).Value = listeEleves
-        Dim statutCapacite As String, nbAffectes As Long, capMin As Long, capMax As Long
-        nbAffectes = affectationsProjet(projet).Count
-        capMin = projetsCapacites(projet)(0)
-        capMax = projetsCapacites(projet)(1)
-        If nbAffectes < capMin Then
-            statutCapacite = "MINIMUM NON ATTEINT (" & nbAffectes & "/" & capMin & ")"
-            wsResultats.Cells(ligneResultat, 3).Interior.Color = vbYellow
-        Else
-            statutCapacite = "OK (" & nbAffectes & "/" & capMax & ")"
-            wsResultats.Cells(ligneResultat, 3).Interior.ColorIndex = xlNone
-        End If
-        wsResultats.Cells(ligneResultat, 3).Value = statutCapacite
-        ligneResultat = ligneResultat + 1
+        ligneR = ligneR + 1
     Next projet
-    wsResultats.Columns.AutoFit
-
+    wsR.Columns.AutoFit
     wsLog.Columns.AutoFit
+
     Application.ScreenUpdating = True
-    MsgBox "L'affectation pas à pas est terminée.", vbInformation
+    MsgBox "Affectation pas à pas terminée.", vbInformation
 
 End Sub
 
-' === Les procédures utilitaires ci-dessous n'ont pas changé et sont nécessaires ===
-Private Sub LogStep(ByVal ws As Worksheet, ByRef ligne As Long, ByVal action As String, ByVal decision As String, ByVal statut As String, ByVal celibataires As String)
-    ligne = ligne + 1
-    ws.Cells(ligne, 1).Value = ligne - 1
-    ws.Cells(ligne, 2).Value = action
-    ws.Cells(ligne, 3).Value = decision
-    ws.Cells(ligne, 4).Value = statut
-    ws.Cells(ligne, 5).Value = celibataires
-End Sub
 
-Private Function GetCelibatairesString(ByVal celibatairesColl As Collection) As String
-    If celibatairesColl.Count = 0 Then
-        GetCelibatairesString = "Aucun"
-        Exit Function
-    End If
-    Dim arr() As String, i As Long
-    ReDim arr(1 To celibatairesColl.Count)
-    For i = 1 To celibatairesColl.Count
-        arr(i) = celibatairesColl(i)
-    Next i
-    GetCelibatairesString = Join(arr, ", ")
-End Function
-
-
-'****************************************************************************************
-' MACRO DE DIAGNOSTIC (Version Finale et Définitivement Corrigée)
-'****************************************************************************************
-Sub DiagnostiqueAffectation()
-
-    ' Déclaration des feuilles et objets
-    Dim wsEleves As Worksheet, wsProjets As Worksheet, wsLog As Worksheet
-    Dim elevesPrefs As Object, projetsPrefs As Object, celibataires As Collection
-    
-    ' Initialisation
-    Set elevesPrefs = CreateObject("Scripting.Dictionary")
-    Set celibataires = New Collection
-    
-    ' Association des feuilles
-    On Error Resume Next
-    Set wsEleves = ThisWorkbook.Sheets("Préférences_Élèves")
-    Set wsProjets = ThisWorkbook.Sheets("Préférences_Projets")
-    Set wsLog = ThisWorkbook.Sheets("Log_Affectation")
-    If wsEleves Is Nothing Or wsProjets Is Nothing Or wsLog Is Nothing Then
-        MsgBox "Erreur : Feuilles manquantes.", vbCritical
-        Exit Sub
-    End If
-    On Error GoTo 0
-    
-    Application.ScreenUpdating = False
-    wsLog.Cells.Clear
-    wsLog.Range("A1:C1").Value = Array("Élève", "Vérification Choix 1", "Vérification Choix 2")
-    wsLog.Range("A1:C1").Font.Bold = True
-
-    ' --- LECTURE DES DONNÉES (CORRIGÉE) ---
-    Dim i As Long, j As Long
-    For i = 2 To wsEleves.Cells(wsEleves.Rows.Count, "A").End(xlUp).Row
-        Dim nomEleve As String: nomEleve = Trim(wsEleves.Cells(i, 1).Value)
-        If nomEleve <> "" Then
-            ' CORRECTION DÉFINITIVE : On déclare et crée la liste ICI, à l'intérieur de la boucle.
-            ' Cela garantit une nouvelle liste indépendante pour chaque élève.
-            Dim prefsList As New Collection
-            
-            celibataires.Add nomEleve
-            
-            For j = 2 To wsEleves.Cells(i, wsEleves.Columns.Count).End(xlToLeft).Column
-                prefsList.Add Trim(wsEleves.Cells(i, j).Value)
-            Next j
-            
-            Set elevesPrefs(nomEleve) = prefsList
-        End If
-    Next i
-    
-    ' --- VÉRIFICATION DES DONNÉES LUES ---
-    Dim ligneLog As Long: ligneLog = 1
-    Dim eleve As Variant
-    For Each eleve In elevesPrefs.Keys
-        ligneLog = ligneLog + 1
-        wsLog.Cells(ligneLog, 1).Value = eleve
-        
-        ' On affiche dans le log les 2 premiers choix que la macro a en mémoire
-        If elevesPrefs(eleve).Count >= 1 Then
-            wsLog.Cells(ligneLog, 2).Value = elevesPrefs(eleve)(1)
-        End If
-        If elevesPrefs(eleve).Count >= 2 Then
-            wsLog.Cells(ligneLog, 3).Value = elevesPrefs(eleve)(2)
-        End If
-    Next eleve
-    
-    wsLog.Columns.AutoFit
-    Application.ScreenUpdating = True
-    
-    MsgBox "Le diagnostic de lecture est terminé. Veuillez vérifier la feuille 'Log_Affectation' pour voir les préférences que la macro a réellement lues. Si elles sont correctes, l'algorithme fonctionnera.", vbInformation
-
-End Sub
-
-'****************************************************************************************
-' MACRO : Créer un rapport de satisfaction (Version Finale et Définitive)
-'****************************************************************************************
+'================================================================================================
+' MACRO 4 : RAPPORT DE SATISFACTION DES ÉQUIPES
+' Pour chaque équipe : rang du projet obtenu dans sa liste de vœux
+' Statistiques globales : moyenne et écart-type des rangs (écart-type d'échantillon)
+'================================================================================================
 Sub CreerRapportSatisfaction()
 
-    ' Déclaration des feuilles et des objets
-    Dim wsResultats As Worksheet, wsPrefsEleves As Worksheet, wsRapport As Worksheet
-    Dim affectations As Object, prefsEleves As Object
-    Dim rangsObtenus As Collection
-    
-    ' Déclaration des variables de boucle et de travail
-    Dim i As Long, j As Long
-    Dim eleve As Variant
-    
-    ' Initialisation
-    Set affectations = CreateObject("Scripting.Dictionary")
-    Set prefsEleves = CreateObject("Scripting.Dictionary")
-    Set rangsObtenus = New Collection
+    Dim wsR As Worksheet, wsPE As Worksheet, wsRapport As Worksheet
 
-    ' --- Association des feuilles ---
     On Error Resume Next
-    Set wsResultats = ThisWorkbook.Sheets("Résultats")
-    Set wsPrefsEleves = ThisWorkbook.Sheets("Préférences_Élèves")
+    Set wsR       = ThisWorkbook.Sheets("Résultats")
+    Set wsPE      = ThisWorkbook.Sheets("Préférences_Équipes")
     Set wsRapport = ThisWorkbook.Sheets("Rapport_Satisfaction")
-    If wsResultats Is Nothing Or wsPrefsEleves Is Nothing Or wsRapport Is Nothing Then
-        MsgBox "Erreur : Assurez-vous que les feuilles 'Résultats', 'Préférences_Élèves' et 'Rapport_Satisfaction' existent.", vbCritical
-        Exit Sub
+    If wsR Is Nothing Or wsPE Is Nothing Or wsRapport Is Nothing Then
+        MsgBox "Erreur : feuilles manquantes.", vbCritical: Exit Sub
     End If
     On Error GoTo 0
-    
+
     Application.ScreenUpdating = False
 
-    ' --- ÉTAPE 1 : Lire les résultats de l'affectation ---
-    For i = 2 To wsResultats.Cells(wsResultats.Rows.Count, "A").End(xlUp).Row
-        Dim projetAffecte As String: projetAffecte = Trim(wsResultats.Cells(i, 1).Value)
-        Dim listeElevesStr As String: listeElevesStr = Trim(wsResultats.Cells(i, 2).Value)
-        
-        If listeElevesStr <> "Aucun" And listeElevesStr <> "" Then
-            Dim elevesAffectesArray As Variant: elevesAffectesArray = Split(listeElevesStr, ", ")
-            For Each eleve In elevesAffectesArray
-                affectations(Trim(eleve)) = projetAffecte
-            Next eleve
+    ' Lecture affectations équipe -> projet depuis Résultats
+    Dim affectations As Object: Set affectations = CreateObject("Scripting.Dictionary")
+    Dim i As Long, j As Long
+    For i = 2 To wsR.Cells(wsR.Rows.Count, "A").End(xlUp).Row
+        Dim projetAff As String: projetAff = Trim(wsR.Cells(i, 1).Value)
+        Dim listeStr As String:  listeStr  = Trim(wsR.Cells(i, 2).Value)
+        If listeStr <> "Aucune" And listeStr <> "" Then
+            Dim arr As Variant: arr = Split(listeStr, ", ")
+            Dim eq As Variant
+            For Each eq In arr: affectations(Trim(eq)) = projetAff: Next eq
         End If
     Next i
-    
-    ' --- ÉTAPE 2 : Lire les préférences de chaque élève (Nouvelle Logique Fiable) ---
-    For i = 2 To wsPrefsEleves.Cells(wsPrefsEleves.Rows.Count, "A").End(xlUp).Row
-        Dim nomEleve As String: nomEleve = Trim(wsPrefsEleves.Cells(i, 1).Value)
-        If nomEleve <> "" Then
-            ' On crée la collection DIRECTEMENT dans le dictionnaire pour cet élève
-            Set prefsEleves(nomEleve) = New Collection
-            
-            ' On remplit la collection qui est DÉJÀ dans le dictionnaire
-            For j = 2 To wsPrefsEleves.Cells(i, wsPrefsEleves.Columns.Count).End(xlToLeft).Column
-                prefsEleves(nomEleve).Add Trim(wsPrefsEleves.Cells(i, j).Value)
-            Next j
-        End If
-    Next i
-    
-    ' --- ÉTAPE 3 : Générer le rapport ---
-    wsRapport.Cells.ClearContents
-    wsRapport.Range("A1:D1").Value = Array("Élève", "Projet Affecté", "Rang du Choix", "Diagnostic")
-    wsRapport.Range("A1:D1").Font.Bold = True
-    
-    Dim ligneRapport As Long: ligneRapport = 1
-    
-    For Each eleve In prefsEleves.Keys
-        ligneRapport = ligneRapport + 1
-        wsRapport.Cells(ligneRapport, 1).Value = eleve
-        
-        If affectations.Exists(eleve) Then
-            Dim projetObtenu As String: projetObtenu = affectations(eleve)
-            wsRapport.Cells(ligneRapport, 2).Value = projetObtenu
-            
-            Dim listeDeChoix As Collection: Set listeDeChoix = prefsEleves(eleve)
-            Dim rang As Long: rang = 0
-            
-            For j = 1 To listeDeChoix.Count
-                If StrComp(listeDeChoix(j), projetObtenu, vbTextCompare) = 0 Then
-                    rang = j
-                    Exit For
-                End If
-            Next j
-            
-            If rang > 0 Then
-                wsRapport.Cells(ligneRapport, 3).Value = rang
-                rangsObtenus.Add rang
-                wsRapport.Cells(ligneRapport, 4).Value = "OK"
-            Else
-                wsRapport.Cells(ligneRapport, 3).Value = "Erreur"
-                wsRapport.Cells(ligneRapport, 4).Value = "Projet '" & projetObtenu & "' non trouvé dans les vœux."
-            End If
-            
-        Else
-            wsRapport.Cells(ligneRapport, 2).Value = "Non affecté"
-            wsRapport.Cells(ligneRapport, 3).Value = "N/A"
-        End If
-    Next eleve
-    
-    ' --- ÉTAPE 4 : Calculer et afficher les statistiques ---
-    If rangsObtenus.Count > 0 Then
-        Dim sommeRangs As Double: sommeRangs = 0
-        Dim rangItem As Variant
-        For Each rangItem In rangsObtenus
-            sommeRangs = sommeRangs + rangItem
-        Next rangItem
-        Dim rangMoyen As Double: rangMoyen = sommeRangs / rangsObtenus.Count
-        
-        Dim sommeCarresEcarts As Double: sommeCarresEcarts = 0
-        For Each rangItem In rangsObtenus
-            sommeCarresEcarts = sommeCarresEcarts + (rangItem - rangMoyen) ^ 2
-        Next rangItem
-        Dim ecartType As Double
-        If rangsObtenus.Count > 1 Then
-            ecartType = Sqr(sommeCarresEcarts / (rangsObtenus.Count - 1))
-        Else
-            ecartType = 0
-        End If
 
-        ligneRapport = ligneRapport + 2
-        wsRapport.Cells(ligneRapport, "B").Value = "Satisfaction moyenne :"
-        wsRapport.Cells(ligneRapport, "C").Value = Round(rangMoyen, 2)
-        
-        ligneRapport = ligneRapport + 1
-        wsRapport.Cells(ligneRapport, "B").Value = "Écart-type des rangs :"
-        wsRapport.Cells(ligneRapport, "C").Value = Round(ecartType, 2)
-        
-        wsRapport.Range(wsRapport.Cells(ligneRapport - 1, "B"), wsRapport.Cells(ligneRapport, "C")).Font.Bold = True
+    ' Lecture des préférences des équipes
+    Dim prefsEquipes As Object: Set prefsEquipes = CreateObject("Scripting.Dictionary")
+    For i = 2 To wsPE.Cells(wsPE.Rows.Count, "A").End(xlUp).Row
+        Dim nomEq As String: nomEq = Trim(wsPE.Cells(i, 1).Value)
+        If nomEq <> "" Then
+            Set prefsEquipes(nomEq) = New Collection
+            For j = 2 To wsPE.Cells(i, wsPE.Columns.Count).End(xlToLeft).Column
+                prefsEquipes(nomEq).Add Trim(wsPE.Cells(i, j).Value)
+            Next j
+        End If
+    Next i
+
+    ' Génération du rapport
+    wsRapport.Cells.ClearContents
+    wsRapport.Range("A1:C1").Value = Array("Équipe", "Projet Affecté", "Rang du Choix")
+    wsRapport.Range("A1:C1").Font.Bold = True
+
+    Dim rangsObtenus As New Collection
+    Dim ligneRap As Long: ligneRap = 1
+    Dim equipe As Variant
+
+    For Each equipe In prefsEquipes.Keys
+        ligneRap = ligneRap + 1
+        wsRapport.Cells(ligneRap, 1).Value = equipe
+        If affectations.Exists(equipe) Then
+            Dim projetObtenu As String: projetObtenu = affectations(equipe)
+            wsRapport.Cells(ligneRap, 2).Value = projetObtenu
+            Dim rang As Long: rang = 0
+            Dim prefs As Collection: Set prefs = prefsEquipes(equipe)
+            For j = 1 To prefs.Count
+                If StrComp(prefs(j), projetObtenu, vbTextCompare) = 0 Then rang = j: Exit For
+            Next j
+            If rang > 0 Then
+                wsRapport.Cells(ligneRap, 3).Value = rang
+                rangsObtenus.Add rang
+            Else
+                wsRapport.Cells(ligneRap, 3).Value = "Erreur : projet introuvable dans les vœux"
+            End If
+        Else
+            wsRapport.Cells(ligneRap, 2).Value = "Non affectée"
+            wsRapport.Cells(ligneRap, 3).Value = "N/A"
+        End If
+    Next equipe
+
+    ' Statistiques (écart-type d'échantillon)
+    If rangsObtenus.Count > 0 Then
+        Dim somme As Double: somme = 0
+        Dim ri As Variant
+        For Each ri In rangsObtenus: somme = somme + ri: Next ri
+        Dim moyenne As Double: moyenne = somme / rangsObtenus.Count
+
+        Dim sc As Double: sc = 0
+        For Each ri In rangsObtenus: sc = sc + (ri - moyenne) ^ 2: Next ri
+        Dim ecartType As Double
+        If rangsObtenus.Count > 1 Then ecartType = Sqr(sc / (rangsObtenus.Count - 1)) Else ecartType = 0
+
+        ligneRap = ligneRap + 2
+        wsRapport.Cells(ligneRap, "B").Value = "Satisfaction moyenne :"
+        wsRapport.Cells(ligneRap, "C").Value = Round(moyenne, 2)
+        ligneRap = ligneRap + 1
+        wsRapport.Cells(ligneRap, "B").Value = "Écart-type des rangs :"
+        wsRapport.Cells(ligneRap, "C").Value = Round(ecartType, 2)
+        wsRapport.Range(wsRapport.Cells(ligneRap - 1, "B"), wsRapport.Cells(ligneRap, "C")).Font.Bold = True
     End If
-    
+
     wsRapport.Columns.AutoFit
     Application.ScreenUpdating = True
-    
-    MsgBox "Le rapport de satisfaction des élèves a été généré.", vbInformation
+    MsgBox "Rapport de satisfaction des équipes généré.", vbInformation
 
 End Sub
 
-'****************************************************************************************
-' MACRO : Rapport complet par projet avec double analyse de satisfaction (élèves et projet)
-'****************************************************************************************
-Sub CreerRapportProjets()
 
-    ' --- Déclarations ---
-    Dim wsResultats As Worksheet, wsPrefsEleves As Worksheet, wsPrefsProjets As Worksheet, wsRapportProjet As Worksheet
-    Dim affectationsProjet As Object, prefsEleves As Object, projetsPrefs As Object
-    
-    ' --- Initialisation ---
-    Set affectationsProjet = CreateObject("Scripting.Dictionary")
-    Set prefsEleves = CreateObject("Scripting.Dictionary")
-    Set projetsPrefs = CreateObject("Scripting.Dictionary")
-
-    ' --- Association des feuilles ---
-    On Error Resume Next
-    Set wsResultats = ThisWorkbook.Sheets("Résultats")
-    Set wsPrefsEleves = ThisWorkbook.Sheets("Préférences_Élèves")
-    Set wsPrefsProjets = ThisWorkbook.Sheets("Préférences_Projets")
-    Set wsRapportProjet = ThisWorkbook.Sheets("Affectations_par_Projet")
-    If wsResultats Is Nothing Or wsPrefsEleves Is Nothing Or wsPrefsProjets Is Nothing Or wsRapportProjet Is Nothing Then
-        MsgBox "Erreur : Assurez-vous que toutes les feuilles nécessaires existent.", vbCritical
-        Exit Sub
-    End If
-    On Error GoTo 0
-    
-    Application.ScreenUpdating = False
-
-    ' --- ÉTAPE 1 : Lire toutes les données nécessaires ---
-    Dim i As Long, j As Long, eleve As Variant, projet As Variant
-    
-    ' Lecture des affectations
-    For i = 2 To wsResultats.Cells(wsResultats.Rows.Count, "A").End(xlUp).Row
-        Dim projetAffecte As String: projetAffecte = Trim(wsResultats.Cells(i, 1).Value)
-        Dim listeElevesStr As String: listeElevesStr = Trim(wsResultats.Cells(i, 2).Value)
-        Set affectationsProjet(projetAffecte) = New Collection
-        If listeElevesStr <> "Aucun" And listeElevesStr <> "" Then
-            Dim elevesAffectesArray As Variant: elevesAffectesArray = Split(listeElevesStr, ", ")
-            For Each eleve In elevesAffectesArray
-                affectationsProjet(projetAffecte).Add Trim(eleve)
-            Next eleve
-        End If
-    Next i
-    
-    ' Lecture des préférences des élèves
-    For i = 2 To wsPrefsEleves.Cells(wsPrefsEleves.Rows.Count, "A").End(xlUp).Row
-        Dim nomEleve As String: nomEleve = Trim(wsPrefsEleves.Cells(i, 1).Value)
-        If nomEleve <> "" Then
-            Set prefsEleves(nomEleve) = New Collection
-            For j = 2 To wsPrefsEleves.Cells(i, wsPrefsEleves.Columns.Count).End(xlToLeft).Column
-                prefsEleves(nomEleve).Add Trim(wsPrefsEleves.Cells(i, j).Value)
-            Next j
-        End If
-    Next i
-    
-    ' Lecture des préférences des projets
-    For i = 2 To wsPrefsProjets.Cells(wsPrefsProjets.Rows.Count, "A").End(xlUp).Row
-        Dim nomProjet As String: nomProjet = Trim(wsPrefsProjets.Cells(i, 1).Value)
-        If nomProjet <> "" Then
-            Set projetsPrefs(nomProjet) = CreateObject("Scripting.Dictionary")
-            For j = 4 To wsPrefsProjets.Cells(1, wsPrefsProjets.Columns.Count).End(xlToLeft).Column
-                projetsPrefs(nomProjet)(Trim(wsPrefsProjets.Cells(1, j).Value)) = wsPrefsProjets.Cells(i, j).Value
-            Next j
-        End If
-    Next i
-    
-    ' --- ÉTAPE 2 : Générer le rapport ---
-    wsRapportProjet.Cells.Clear
-    wsRapportProjet.Range("A1:E1").Value = Array("Projet", "Moy. Satisfaction Élèves", "Écart-type Satis. Élèves", "Moy. Qualité Équipe", "Écart-type Qualité Équipe")
-    wsRapportProjet.Range("A1:E1").Font.Bold = True
-    
-    Dim ligneRapport As Long: ligneRapport = 1
-    
-    For Each projet In affectationsProjet.Keys
-        ligneRapport = ligneRapport + 1
-        wsRapportProjet.Cells(ligneRapport, 1).Value = projet
-        
-        Dim listeEleves As Collection: Set listeEleves = affectationsProjet(projet)
-        Dim nbEleves As Long: nbEleves = listeEleves.Count
-        
-        If nbEleves > 0 Then
-            Dim rangsSatisEleves As New Collection
-            Dim rangsQualiteProjet As New Collection
-            
-            ' Pour chaque élève du projet, trouver les deux types de rangs
-            For Each eleve In listeEleves
-                ' 1. Satisfaction de l'élève
-                If prefsEleves.Exists(eleve) Then
-                    Dim rangSatis As Long: rangSatis = 0
-                    Dim listeDeChoix As Collection: Set listeDeChoix = prefsEleves(eleve)
-                    For j = 1 To listeDeChoix.Count
-                        If StrComp(listeDeChoix(j), projet, vbTextCompare) = 0 Then
-                            rangSatis = j
-                            Exit For
-                        End If
-                    Next j
-                    If rangSatis > 0 Then rangsSatisEleves.Add rangSatis
-                End If
-                
-                ' 2. "Qualité" de l'élève pour le projet
-                If projetsPrefs.Exists(projet) And projetsPrefs(projet).Exists(eleve) Then
-                    rangsQualiteProjet.Add projetsPrefs(projet)(eleve)
-                End If
-            Next eleve
-            
-            ' Calculer et afficher les statistiques de satisfaction des élèves
-            Dim moyenneSatis As Double, ecartTypeSatis As Double
-            If rangsSatisEleves.Count > 0 Then
-                moyenneSatis = Application.WorksheetFunction.Average(CollectionToArray(rangsSatisEleves))
-                If rangsSatisEleves.Count > 1 Then ecartTypeSatis = Application.WorksheetFunction.StDev_S(CollectionToArray(rangsSatisEleves))
-            End If
-            wsRapportProjet.Cells(ligneRapport, 2).Value = Round(moyenneSatis, 2)
-            wsRapportProjet.Cells(ligneRapport, 3).Value = Round(ecartTypeSatis, 2)
-            
-            ' Calculer et afficher les statistiques de qualité de l'équipe
-            Dim moyenneQualite As Double, ecartTypeQualite As Double
-            If rangsQualiteProjet.Count > 0 Then
-                moyenneQualite = Application.WorksheetFunction.Average(CollectionToArray(rangsQualiteProjet))
-                If rangsQualiteProjet.Count > 1 Then ecartTypeQualite = Application.WorksheetFunction.StDev_S(CollectionToArray(rangsQualiteProjet))
-            End If
-            wsRapportProjet.Cells(ligneRapport, 4).Value = Round(moyenneQualite, 2)
-            wsRapportProjet.Cells(ligneRapport, 5).Value = Round(ecartTypeQualite, 2)
-            
-            ' Afficher la liste des élèves dans les colonnes suivantes
-            For j = 1 To nbEleves
-                If j = 1 Then
-                     wsRapportProjet.Cells(1, 6).Value = "Membres de l'équipe ->"
-                     wsRapportProjet.Cells(1, 6).Font.Bold = True
-                End If
-                wsRapportProjet.Cells(ligneRapport, 5 + j).Value = listeEleves(j)
-            Next j
-        Else
-            ' Si le projet est vide, mettre N/A partout
-            wsRapportProjet.Range("B" & ligneRapport & ":E" & ligneRapport).Value = "N/A"
-        End If
-    Next projet
-    
-    wsRapportProjet.Columns.AutoFit
-    Application.ScreenUpdating = True
-    
-    MsgBox "Le rapport complet par projet a été généré.", vbInformation
-
-End Sub
-
-' Fonction utilitaire pour convertir une Collection en Array pour les WorksheetFunctions
-Private Function CollectionToArray(coll As Collection) As Variant
-    Dim arr() As Variant
-    ReDim arr(1 To coll.Count)
-    Dim i As Long
-    For i = 1 To coll.Count
-        arr(i) = coll(i)
-    Next i
-    CollectionToArray = arr
-End Function
-
-'****************************************************************************************
-' MACRO : Mesurer la performance (Version Finale Corrigée)
-'****************************************************************************************
+'================================================================================================
+' MACRO 5 : BILAN DE PERFORMANCE
+'================================================================================================
 Sub BilanPerformanceAlgorithme()
 
-    ' --- Déclarations ---
-    Dim wsResultats As Worksheet, wsPrefsEleves As Worksheet, wsPrefsProjets As Worksheet, wsBilan As Worksheet, wsDetails As Worksheet
-    Dim affectationsEleve As Object, affectationsProjet As Object, prefsEleves As Object, projetsCapacites As Object
-    Dim rangsObtenus As Collection
-    Dim projetsSousMinimum As Collection, projetsVides As Collection, elevesSansProjet As Collection
-    
-    ' --- Initialisation ---
-    Set affectationsEleve = CreateObject("Scripting.Dictionary")
-    Set affectationsProjet = CreateObject("Scripting.Dictionary")
-    Set prefsEleves = CreateObject("Scripting.Dictionary")
-    Set projetsCapacites = CreateObject("Scripting.Dictionary")
-    Set rangsObtenus = New Collection
-    Set projetsSousMinimum = New Collection
-    Set projetsVides = New Collection
-    Set elevesSansProjet = New Collection
+    Dim wsR As Worksheet, wsPE As Worksheet, wsP As Worksheet
+    Dim wsBilan As Worksheet, wsDetails As Worksheet
 
-    ' --- Association des feuilles ---
     On Error Resume Next
-    Set wsResultats = ThisWorkbook.Sheets("Résultats")
-    Set wsPrefsEleves = ThisWorkbook.Sheets("Préférences_Élèves")
-    Set wsPrefsProjets = ThisWorkbook.Sheets("Préférences_Projets")
-    Set wsBilan = ThisWorkbook.Sheets("Bilan_Performance")
+    Set wsR       = ThisWorkbook.Sheets("Résultats")
+    Set wsPE      = ThisWorkbook.Sheets("Préférences_Équipes")
+    Set wsP       = ThisWorkbook.Sheets("Préférences_Projets")
+    Set wsBilan   = ThisWorkbook.Sheets("Bilan_Performance")
     Set wsDetails = ThisWorkbook.Sheets("Details_Suivi")
     If wsDetails Is Nothing Then
         Set wsDetails = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
         wsDetails.Name = "Details_Suivi"
     End If
     On Error GoTo 0
-    
-    If wsResultats Is Nothing Or wsPrefsEleves Is Nothing Or wsPrefsProjets Is Nothing Or wsBilan Is Nothing Then
-        MsgBox "Erreur : Une ou plusieurs feuilles de base sont manquantes.", vbCritical
-        Exit Sub
+
+    If wsR Is Nothing Or wsPE Is Nothing Or wsP Is Nothing Or wsBilan Is Nothing Then
+        MsgBox "Erreur : feuilles manquantes.", vbCritical: Exit Sub
     End If
-    
+
     Application.ScreenUpdating = False
     wsBilan.Cells.Clear
     wsDetails.Cells.Clear
-    wsBilan.Columns("A").ColumnWidth = 35
-    wsBilan.Columns("B").ColumnWidth = 15
-    wsDetails.Columns("A").ColumnWidth = 35
-    wsDetails.Columns("B").ColumnWidth = 35
 
-    ' --- ÉTAPE 1 : Lire toutes les données ---
-    Dim i As Long, j As Long, eleve As Variant, projet As Variant
-    For i = 2 To wsResultats.Cells(wsResultats.Rows.Count, "A").End(xlUp).Row
-        Dim projetAffecte As String: projetAffecte = Trim(wsResultats.Cells(i, 1).Value)
-        Dim listeElevesStr As String: listeElevesStr = Trim(wsResultats.Cells(i, 2).Value)
-        Set affectationsProjet(projetAffecte) = New Collection
-        If listeElevesStr <> "Aucun" And listeElevesStr <> "" Then
-            Dim elevesAffectesArray As Variant: elevesAffectesArray = Split(listeElevesStr, ", ")
-            For Each eleve In elevesAffectesArray
-                affectationsEleve(Trim(eleve)) = projetAffecte
-                affectationsProjet(projetAffecte).Add Trim(eleve)
-            Next eleve
+    Dim i As Long, j As Long, eq As Variant, projet As Variant
+
+    ' ---- Lecture des données ----
+    Dim affectationsEquipe As Object: Set affectationsEquipe  = CreateObject("Scripting.Dictionary")
+    Dim affectationsProjet As Object: Set affectationsProjet  = CreateObject("Scripting.Dictionary")
+    Dim prefsEquipes As Object:       Set prefsEquipes        = CreateObject("Scripting.Dictionary")
+    Dim projetsCapacites As Object:   Set projetsCapacites    = CreateObject("Scripting.Dictionary")
+
+    For i = 2 To wsR.Cells(wsR.Rows.Count, "A").End(xlUp).Row
+        Dim nomP As String: nomP = Trim(wsR.Cells(i, 1).Value)
+        Dim listeStr As String: listeStr = Trim(wsR.Cells(i, 2).Value)
+        Set affectationsProjet(nomP) = New Collection
+        If listeStr <> "Aucune" And listeStr <> "" Then
+            Dim arr As Variant: arr = Split(listeStr, ", ")
+            For Each eq In arr
+                affectationsEquipe(Trim(eq)) = nomP
+                affectationsProjet(nomP).Add Trim(eq)
+            Next eq
         End If
     Next i
-    For i = 2 To wsPrefsEleves.Cells(wsPrefsEleves.Rows.Count, "A").End(xlUp).Row
-        Dim nomEleve As String: nomEleve = Trim(wsPrefsEleves.Cells(i, 1).Value)
-        If nomEleve <> "" Then
-            Set prefsEleves(nomEleve) = New Collection
-            For j = 2 To wsPrefsEleves.Cells(i, wsPrefsEleves.Columns.Count).End(xlToLeft).Column
-                prefsEleves(nomEleve).Add Trim(wsPrefsEleves.Cells(i, j).Value)
+
+    For i = 2 To wsPE.Cells(wsPE.Rows.Count, "A").End(xlUp).Row
+        Dim nomEq As String: nomEq = Trim(wsPE.Cells(i, 1).Value)
+        If nomEq <> "" Then
+            Set prefsEquipes(nomEq) = New Collection
+            For j = 2 To wsPE.Cells(i, wsPE.Columns.Count).End(xlToLeft).Column
+                prefsEquipes(nomEq).Add Trim(wsPE.Cells(i, j).Value)
             Next j
         End If
     Next i
-    For i = 2 To wsPrefsProjets.Cells(wsPrefsProjets.Rows.Count, "A").End(xlUp).Row
-        Dim nomProjet As String: nomProjet = Trim(wsPrefsProjets.Cells(i, 1).Value)
-        If nomProjet <> "" Then
-            projetsCapacites(nomProjet) = Array(wsPrefsProjets.Cells(i, 2).Value, wsPrefsProjets.Cells(i, 3).Value)
+
+    For i = 2 To wsP.Cells(wsP.Rows.Count, "A").End(xlUp).Row
+        nomP = Trim(wsP.Cells(i, 1).Value)
+        If nomP <> "" Then
+            projetsCapacites(nomP) = Array(CLng(wsP.Cells(i, 2).Value), CLng(wsP.Cells(i, 3).Value))
         End If
     Next i
 
-    ' --- ÉTAPE 2 : Calculer les métriques ---
-    Dim nbElevesTotal As Long: nbElevesTotal = prefsEleves.Count
-    Dim nbElevesAffectes As Long: nbElevesAffectes = affectationsEleve.Count
+    ' ---- Calcul des métriques ----
+    Dim nbEquipesTotal As Long:     nbEquipesTotal     = prefsEquipes.Count
+    Dim nbEquipesAffectees As Long: nbEquipesAffectees = affectationsEquipe.Count
     Dim nbChoix1 As Long, nbChoix2 As Long, nbChoix3 As Long
-    For Each eleve In prefsEleves.Keys
-        If affectationsEleve.Exists(eleve) Then
+    Dim rangsObtenus As New Collection
+    Dim equipesSansProjet As New Collection
+
+    For Each eq In prefsEquipes.Keys
+        If affectationsEquipe.Exists(eq) Then
             Dim rang As Long: rang = 0
-            Dim listeDeChoix As Collection: Set listeDeChoix = prefsEleves(eleve)
-            For j = 1 To listeDeChoix.Count
-                If StrComp(listeDeChoix(j), affectationsEleve(eleve), vbTextCompare) = 0 Then
-                    rang = j
-                    Exit For
-                End If
+            Dim prefs As Collection: Set prefs = prefsEquipes(eq)
+            For j = 1 To prefs.Count
+                If StrComp(prefs(j), affectationsEquipe(eq), vbTextCompare) = 0 Then rang = j: Exit For
             Next j
             If rang > 0 Then
                 rangsObtenus.Add rang
@@ -1076,493 +792,150 @@ Sub BilanPerformanceAlgorithme()
                 End Select
             End If
         Else
-            elevesSansProjet.Add eleve
+            equipesSansProjet.Add eq
         End If
-    Next eleve
+    Next eq
+
+    Dim projetsSousMinimum As New Collection
+    Dim projetsVides As New Collection
     Dim nbProjetsMinAtteint As Long: nbProjetsMinAtteint = 0
-    Dim totalPlacesRemplies As Long: totalPlacesRemplies = nbElevesAffectes
-    Dim totalCapaciteMax As Long: totalCapaciteMax = 0
+
     For Each projet In projetsCapacites.Keys
-        totalCapaciteMax = totalCapaciteMax + projetsCapacites(projet)(1)
-        Dim nbAffectesSurProjet As Long
-        If affectationsProjet.Exists(projet) Then
-            nbAffectesSurProjet = affectationsProjet(projet).Count
-        Else
-            Set affectationsProjet(projet) = New Collection
-        End If
-        If nbAffectesSurProjet = 0 Then
-            projetsVides.Add projet
-        End If
-        If nbAffectesSurProjet < projetsCapacites(projet)(0) Then
+        Dim nbAff As Long
+        nbAff = IIf(affectationsProjet.Exists(projet), affectationsProjet(projet).Count, 0)
+        If nbAff = 0 Then projetsVides.Add projet
+        If nbAff < projetsCapacites(projet)(0) Then
             projetsSousMinimum.Add projet
         Else
             nbProjetsMinAtteint = nbProjetsMinAtteint + 1
         End If
     Next projet
+
     Dim rangMoyen As Double, ecartType As Double
     If rangsObtenus.Count > 0 Then
-        Dim sommeRangs As Double: sommeRangs = 0
-        Dim rangItem As Variant
-        For Each rangItem In rangsObtenus
-            sommeRangs = sommeRangs + rangItem
-        Next rangItem
-        rangMoyen = sommeRangs / rangsObtenus.Count
+        Dim somme As Double: somme = 0
+        Dim ri As Variant
+        For Each ri In rangsObtenus: somme = somme + ri: Next ri
+        rangMoyen = somme / rangsObtenus.Count
         If rangsObtenus.Count > 1 Then
-            Dim sommeCarresEcarts As Double: sommeCarresEcarts = 0
-            For Each rangItem In rangsObtenus
-                sommeCarresEcarts = sommeCarresEcarts + (rangItem - rangMoyen) ^ 2
-            Next rangItem
-            ecartType = Sqr(sommeCarresEcarts / (rangsObtenus.Count - 1))
+            Dim sc As Double: sc = 0
+            For Each ri In rangsObtenus: sc = sc + (ri - rangMoyen) ^ 2: Next ri
+            ecartType = Sqr(sc / (rangsObtenus.Count - 1))
         End If
     End If
-    
-    ' --- ÉTAPE 3 : Écrire le Bilan Synthétique et le lien ---
+
+    ' ---- Écriture du bilan ----
+    wsBilan.Columns("A").ColumnWidth = 45: wsBilan.Columns("B").ColumnWidth = 15
     Dim ligne As Long: ligne = 1
-    wsBilan.Cells(ligne, "A").Value = "BILAN DU POINT DE VUE DES ÉLÈVES": wsBilan.Range("A" & ligne & ":B" & ligne).Merge: wsBilan.Range("A" & ligne).Font.Bold = True
+
+    wsBilan.Cells(ligne, "A").Value = "BILAN DU POINT DE VUE DES ÉQUIPES"
+    wsBilan.Range("A" & ligne & ":B" & ligne).Merge
+    wsBilan.Range("A" & ligne).Font.Bold = True
     ligne = ligne + 2
-    wsBilan.Cells(ligne, "A").Value = "Nombre total d'élèves": wsBilan.Cells(ligne, "B").Value = nbElevesTotal
-    ligne = ligne + 1
-    wsBilan.Cells(ligne, "A").Value = "Nombre d'élèves affectés": wsBilan.Cells(ligne, "B").Value = nbElevesAffectes
-    ligne = ligne + 1
-    wsBilan.Cells(ligne, "A").Value = "Nombre d'élèves non affectés": wsBilan.Cells(ligne, "B").Value = elevesSansProjet.Count
-    ligne = ligne + 1
-    If nbElevesTotal > 0 Then wsBilan.Cells(ligne, "A").Value = "Taux d'affectation": wsBilan.Cells(ligne, "B").Value = Format(nbElevesAffectes / nbElevesTotal, "0.0%")
+    wsBilan.Cells(ligne, "A").Value = "Nombre total d'équipes":          wsBilan.Cells(ligne, "B").Value = nbEquipesTotal:          ligne = ligne + 1
+    wsBilan.Cells(ligne, "A").Value = "Nombre d'équipes affectées":      wsBilan.Cells(ligne, "B").Value = nbEquipesAffectees:      ligne = ligne + 1
+    wsBilan.Cells(ligne, "A").Value = "Nombre d'équipes non affectées":  wsBilan.Cells(ligne, "B").Value = equipesSansProjet.Count: ligne = ligne + 1
+    If nbEquipesTotal > 0 Then
+        wsBilan.Cells(ligne, "A").Value = "Taux d'affectation"
+        wsBilan.Cells(ligne, "B").Value = Format(nbEquipesAffectees / nbEquipesTotal, "0.0%")
+    End If: ligne = ligne + 2
+    wsBilan.Cells(ligne, "A").Value = "Satisfaction moyenne (rang du vœu obtenu)": wsBilan.Cells(ligne, "B").Value = Round(rangMoyen, 2): ligne = ligne + 1
+    wsBilan.Cells(ligne, "A").Value = "Écart-type des rangs (équité)":             wsBilan.Cells(ligne, "B").Value = Round(ecartType, 2):  ligne = ligne + 2
+    wsBilan.Cells(ligne, "A").Value = "Équipes ayant obtenu leur 1er vœu":   wsBilan.Cells(ligne, "B").Value = nbChoix1: ligne = ligne + 1
+    wsBilan.Cells(ligne, "A").Value = "Équipes ayant obtenu leur 2ème vœu":  wsBilan.Cells(ligne, "B").Value = nbChoix2: ligne = ligne + 1
+    wsBilan.Cells(ligne, "A").Value = "Équipes ayant obtenu leur 3ème vœu":  wsBilan.Cells(ligne, "B").Value = nbChoix3: ligne = ligne + 3
+
+    wsBilan.Cells(ligne, "A").Value = "BILAN DU POINT DE VUE DES PROJETS"
+    wsBilan.Range("A" & ligne & ":B" & ligne).Merge
+    wsBilan.Range("A" & ligne).Font.Bold = True
     ligne = ligne + 2
-    wsBilan.Cells(ligne, "A").Value = "Satisfaction moyenne (rang du vœu)": wsBilan.Cells(ligne, "B").Value = Round(rangMoyen, 2)
-    ligne = ligne + 1
-    wsBilan.Cells(ligne, "A").Value = "Écart-type des rangs (équité)": wsBilan.Cells(ligne, "B").Value = Round(ecartType, 2)
-    ligne = ligne + 2
-    wsBilan.Cells(ligne, "A").Value = "Élèves ayant obtenu leur 1er vœu": wsBilan.Cells(ligne, "B").Value = nbChoix1
-    ligne = ligne + 1
-    wsBilan.Cells(ligne, "A").Value = "Élèves ayant obtenu leur 2ème vœu": wsBilan.Cells(ligne, "B").Value = nbChoix2
-    ligne = ligne + 1
-    wsBilan.Cells(ligne, "A").Value = "Élèves ayant obtenu leur 3ème vœu": wsBilan.Cells(ligne, "B").Value = nbChoix3
-    ligne = ligne + 3
-    wsBilan.Cells(ligne, "A").Value = "BILAN DU POINT DE VUE DES PROJETS": wsBilan.Range("A" & ligne & ":B" & ligne).Merge: wsBilan.Range("A" & ligne).Font.Bold = True
-    ligne = ligne + 2
-    wsBilan.Cells(ligne, "A").Value = "Nombre total de projets": wsBilan.Cells(ligne, "B").Value = projetsCapacites.Count
-    ligne = ligne + 1
-    wsBilan.Cells(ligne, "A").Value = "Projets ayant atteint leur capacité Min.": wsBilan.Cells(ligne, "B").Value = nbProjetsMinAtteint
-    ligne = ligne + 1
-    If projetsCapacites.Count > 0 Then wsBilan.Cells(ligne, "A").Value = "Taux de projets 'satisfaits'": wsBilan.Cells(ligne, "B").Value = Format(nbProjetsMinAtteint / projetsCapacites.Count, "0.0%")
-    ligne = ligne + 2
-    wsBilan.Cells(ligne, "A").Value = "Nombre total de places remplies": wsBilan.Cells(ligne, "B").Value = totalPlacesRemplies
-    ligne = ligne + 1
-    wsBilan.Cells(ligne, "A").Value = "Capacité d'accueil maximale totale": wsBilan.Cells(ligne, "B").Value = totalCapaciteMax
-    ligne = ligne + 1
-    If totalCapaciteMax > 0 Then wsBilan.Cells(ligne, "A").Value = "Taux d'occupation global": wsBilan.Cells(ligne, "B").Value = Format(totalPlacesRemplies / totalCapaciteMax, "0.0%")
+    wsBilan.Cells(ligne, "A").Value = "Nombre total de projets":                       wsBilan.Cells(ligne, "B").Value = projetsCapacites.Count: ligne = ligne + 1
+    wsBilan.Cells(ligne, "A").Value = "Projets ayant atteint leur minimum d'équipes":  wsBilan.Cells(ligne, "B").Value = nbProjetsMinAtteint:     ligne = ligne + 1
+    If projetsCapacites.Count > 0 Then
+        wsBilan.Cells(ligne, "A").Value = "Taux de projets satisfaits"
+        wsBilan.Cells(ligne, "B").Value = Format(nbProjetsMinAtteint / projetsCapacites.Count, "0.0%")
+    End If: ligne = ligne + 2
     wsBilan.Range("A1:B" & ligne).Borders.Weight = xlThin
-    ligne = ligne + 2
-    wsBilan.Hyperlinks.Add Anchor:=wsBilan.Cells(ligne, "A"), Address:="", SubAddress:="'Details_Suivi'!A1", TextToDisplay:="Cliquer ici pour voir les listes de suivi détaillées"
+
+    ligne = ligne + 1
+    wsBilan.Hyperlinks.Add Anchor:=wsBilan.Cells(ligne, "A"), Address:="", _
+        SubAddress:="'Details_Suivi'!A1", TextToDisplay:="Voir les listes de suivi détaillées"
     wsBilan.Cells(ligne, "A").Font.Underline = xlUnderlineStyleSingle
     wsBilan.Cells(ligne, "A").Font.Color = vbBlue
 
-    ' --- ÉTAPE 4 : Écrire les listes de suivi ---
-    ' CORRECTION : La déclaration en double a été supprimée d'ici.
-    ' La variable wsDetails est déjà déclarée et définie en haut de la macro.
-    wsDetails.Cells.Clear
-    Dim ligneDetails As Long: ligneDetails = 1
-    wsDetails.Columns("A").ColumnWidth = 35
-    wsDetails.Columns("B").ColumnWidth = 35
-    wsDetails.Cells(ligneDetails, "A").Value = "LISTES DE SUIVI DÉTAILLÉES"
-    wsDetails.Cells(ligneDetails, "A").Font.Bold = True
-    ligneDetails = ligneDetails + 2
-    wsDetails.Cells(ligneDetails, "A").Value = "Élèves sans projet :"
-    wsDetails.Cells(ligneDetails, "A").Font.Bold = True
-    If elevesSansProjet.Count > 0 Then
-        For i = 1 To elevesSansProjet.Count
-            wsDetails.Cells(ligneDetails + i - 1, "B").Value = elevesSansProjet(i)
-        Next i
-        ligneDetails = ligneDetails + elevesSansProjet.Count
+    ' ---- Listes de suivi ----
+    wsDetails.Columns("A").ColumnWidth = 35: wsDetails.Columns("B").ColumnWidth = 35
+    Dim ld As Long: ld = 1
+    wsDetails.Cells(ld, "A").Value = "LISTES DE SUIVI": wsDetails.Cells(ld, "A").Font.Bold = True: ld = ld + 2
+
+    wsDetails.Cells(ld, "A").Value = "Équipes sans projet :": wsDetails.Cells(ld, "A").Font.Bold = True
+    If equipesSansProjet.Count > 0 Then
+        For i = 1 To equipesSansProjet.Count: wsDetails.Cells(ld + i - 1, "B").Value = equipesSansProjet(i): Next i
+        ld = ld + equipesSansProjet.Count
     Else
-        wsDetails.Cells(ligneDetails, "B").Value = "Aucun"
-        ligneDetails = ligneDetails + 1
-    End If
-    ligneDetails = ligneDetails + 1
-    wsDetails.Cells(ligneDetails, "A").Value = "Projets n'atteignant pas leur minimum :"
-    wsDetails.Cells(ligneDetails, "A").Font.Bold = True
+        wsDetails.Cells(ld, "B").Value = "Aucune": ld = ld + 1
+    End If: ld = ld + 1
+
+    wsDetails.Cells(ld, "A").Value = "Projets n'atteignant pas leur minimum d'équipes :": wsDetails.Cells(ld, "A").Font.Bold = True
     If projetsSousMinimum.Count > 0 Then
-        For i = 1 To projetsSousMinimum.Count
-            wsDetails.Cells(ligneDetails + i - 1, "B").Value = projetsSousMinimum(i)
-        Next i
-        ligneDetails = ligneDetails + projetsSousMinimum.Count
+        For i = 1 To projetsSousMinimum.Count: wsDetails.Cells(ld + i - 1, "B").Value = projetsSousMinimum(i): Next i
+        ld = ld + projetsSousMinimum.Count
     Else
-        wsDetails.Cells(ligneDetails, "B").Value = "Aucun"
-        ligneDetails = ligneDetails + 1
-    End If
-    ligneDetails = ligneDetails + 1
-    wsDetails.Cells(ligneDetails, "A").Value = "Projets sans aucun élève :"
-    wsDetails.Cells(ligneDetails, "A").Font.Bold = True
+        wsDetails.Cells(ld, "B").Value = "Aucun": ld = ld + 1
+    End If: ld = ld + 1
+
+    wsDetails.Cells(ld, "A").Value = "Projets sans aucune équipe :": wsDetails.Cells(ld, "A").Font.Bold = True
     If projetsVides.Count > 0 Then
-        For i = 1 To projetsVides.Count
-            wsDetails.Cells(ligneDetails + i - 1, "B").Value = projetsVides(i)
-        Next i
+        For i = 1 To projetsVides.Count: wsDetails.Cells(ld + i - 1, "B").Value = projetsVides(i): Next i
     Else
-        wsDetails.Cells(ligneDetails, "B").Value = "Aucun"
+        wsDetails.Cells(ld, "B").Value = "Aucun"
     End If
 
-    ' --- Finalisation ---
-    CreerDashboard
-    ThisWorkbook.Sheets("Dashboard").Activate
     Application.ScreenUpdating = True
-    MsgBox "Le bilan de performance, les listes de suivi et le tableau de bord ont été générés avec succès.", vbInformation
+    MsgBox "Bilan de performance et listes de suivi générés.", vbInformation
 
 End Sub
 
-'****************************************************************************************
-' MACRO DE VÉRIFICATION FINALE (Version 2, Fiable)
-' Lit et affiche les données brutes pour "Élève 2" de manière robuste.
-'****************************************************************************************
-Sub VerificationFinale_V2()
 
-    Dim wsResultats As Worksheet, wsPrefsEleves As Worksheet, wsLog As Worksheet
-    
+'================================================================================================
+' MACRO DIAGNOSTIC : Vérifier la disponibilité de System.Collections.ArrayList
+'================================================================================================
+Sub TestArrayList()
+    Dim testList As Object
     On Error Resume Next
-    Set wsResultats = ThisWorkbook.Sheets("Résultats")
-    Set wsPrefsEleves = ThisWorkbook.Sheets("Préférences_Élèves")
-    Set wsLog = ThisWorkbook.Sheets("Log_Affectation")
-    If wsResultats Is Nothing Or wsPrefsEleves Is Nothing Or wsLog Is Nothing Then
-        MsgBox "Erreur : Feuilles manquantes.", vbCritical
-        Exit Sub
+    Set testList = CreateObject("System.Collections.ArrayList")
+    If Err.Number <> 0 Then
+        MsgBox "ERREUR : 'System.Collections.ArrayList' n'est PAS disponible.", vbCritical
+    Else
+        MsgBox "SUCCÈS : 'System.Collections.ArrayList' est disponible.", vbInformation
     End If
-    On Error GoTo 0
-    
-    Application.ScreenUpdating = False
-    wsLog.Cells.Clear
-    wsLog.Range("A1:Z1").Font.Bold = True
-    
-    ' --- ÉTAPE 1 : Trouver le projet de "Élève 2" (MÉTHODE FIABLE) ---
-    Dim projetObtenu As String: projetObtenu = "Non trouvé"
+End Sub
+
+
+'================================================================================================
+' UTILITAIRES PRIVÉS
+'================================================================================================
+Private Sub LogStep(ByVal ws As Worksheet, ByRef ligne As Long, ByVal action As String, _
+                    ByVal decision As String, ByVal statut As String, ByVal libre As String)
+    ligne = ligne + 1
+    ws.Cells(ligne, 1).Value = ligne - 1
+    ws.Cells(ligne, 2).Value = action
+    ws.Cells(ligne, 3).Value = decision
+    ws.Cells(ligne, 4).Value = statut
+    ws.Cells(ligne, 5).Value = libre
+End Sub
+
+Private Function GetCelibatairesString(ByVal coll As Collection) As String
+    If coll.Count = 0 Then GetCelibatairesString = "Aucune": Exit Function
+    Dim arr() As String: ReDim arr(1 To coll.Count)
     Dim i As Long
-    For i = 2 To wsResultats.Cells(wsResultats.Rows.Count, "A").End(xlUp).Row
-        Dim listeElevesStr As String: listeElevesStr = Trim(wsResultats.Cells(i, 2).Value)
-        
-        If listeElevesStr <> "" And listeElevesStr <> "Aucun" Then
-            Dim elevesArray As Variant: elevesArray = Split(listeElevesStr, ", ")
-            Dim eleve As Variant
-            For Each eleve In elevesArray
-                If Trim(eleve) = "Élève 2" Then
-                    projetObtenu = Trim(wsResultats.Cells(i, 1).Value)
-                    Exit For ' Sort de la boucle des élèves
-                End If
-            Next eleve
-        End If
-        
-        If projetObtenu <> "Non trouvé" Then Exit For ' Sort de la boucle des projets
-    Next i
-    
-    ' --- ÉTAPE 2 : Lire la liste de vœux de "Élève 2" ---
-    Dim ligneEleve As Long: ligneEleve = 0
-    For i = 2 To wsPrefsEleves.Cells(wsPrefsEleves.Rows.Count, "A").End(xlUp).Row
-        If Trim(wsPrefsEleves.Cells(i, "A").Value) = "Élève 2" Then
-            ligneEleve = i
-            Exit For
-        End If
-    Next i
-    
-    ' --- ÉTAPE 3 : Afficher les résultats bruts dans le journal ---
-    wsLog.Cells(1, 1).Value = "Vérification Finale V2 pour 'Élève 2'"
-    wsLog.Cells(2, 1).Value = "Projet affecté (lu depuis 'Résultats'):"
-    wsLog.Cells(2, 2).Value = projetObtenu
-    
-    wsLog.Cells(4, 1).Value = "Liste de vœux (lue depuis 'Préférences_Élèves'):"
-    If ligneEleve > 0 Then
-        Dim j As Long
-        For j = 2 To wsPrefsEleves.Cells(ligneEleve, wsPrefsEleves.Columns.Count).End(xlToLeft).Column
-            wsLog.Cells(4, j).Value = "Vœu " & (j - 1)
-            wsLog.Cells(5, j).Value = Trim(wsPrefsEleves.Cells(ligneEleve, j).Value)
-        Next j
-    Else
-        wsLog.Cells(5, 2).Value = "'Élève 2' non trouvé dans la feuille des préférences."
-    End If
-    
-    wsLog.Columns.AutoFit
-    Application.ScreenUpdating = True
-    MsgBox "Vérification V2 terminée. Veuillez inspecter la feuille 'Log_Affectation'."
+    For i = 1 To coll.Count: arr(i) = coll(i): Next i
+    GetCelibatairesString = Join(arr, ", ")
+End Function
 
-End Sub
-
-
-
-
-
-
-'****************************************************************************************
-' MACRO DE DIAGNOSTIC FINAL : Calcul du rang pour "Élève 2"
-'****************************************************************************************
-Sub DebugRang()
-
-    Dim wsResultats As Worksheet, wsPrefsEleves As Worksheet, wsLog As Worksheet
-    
-    ' --- Initialisation et association des feuilles ---
-    On Error Resume Next
-    Set wsResultats = ThisWorkbook.Sheets("Résultats")
-    Set wsPrefsEleves = ThisWorkbook.Sheets("Préférences_Élèves")
-    Set wsLog = ThisWorkbook.Sheets("Log_Affectation")
-    If wsResultats Is Nothing Or wsPrefsEleves Is Nothing Or wsLog Is Nothing Then
-        MsgBox "Erreur : Feuilles manquantes.", vbCritical
-        Exit Sub
-    End If
-    On Error GoTo 0
-    
-    Application.ScreenUpdating = False
-    wsLog.Cells.Clear
-    wsLog.Range("A1:C1").Value = Array("Étape", "Information", "Résultat de la Vérification")
-    wsLog.Range("A1:C1").Font.Bold = True
-    Dim ligneLog As Long: ligneLog = 1
-
-    ' --- ÉTAPE 1 : Trouver le projet affecté à "Élève 2" ---
-    ligneLog = ligneLog + 1
-    wsLog.Cells(ligneLog, 1).Value = "1. Recherche du projet affecté"
-    
-    Dim projetObtenu As String: projetObtenu = "Non trouvé"
+Private Function CollectionToArray(coll As Collection) As Variant
+    Dim arr() As Variant: ReDim arr(1 To coll.Count)
     Dim i As Long
-    For i = 2 To wsResultats.Cells(wsResultats.Rows.Count, "A").End(xlUp).Row
-        Dim listeElevesStr As String: listeElevesStr = Trim(wsResultats.Cells(i, 2).Value)
-        If listeElevesStr <> "" And listeElevesStr <> "Aucun" Then
-            Dim elevesArray As Variant: elevesArray = Split(listeElevesStr, ", ")
-            Dim eleve As Variant
-            For Each eleve In elevesArray
-                If Trim(eleve) = "Élève 2" Then
-                    projetObtenu = Trim(wsResultats.Cells(i, 1).Value)
-                    Exit For
-                End If
-            Next eleve
-        End If
-        If projetObtenu <> "Non trouvé" Then Exit For
-    Next i
-    wsLog.Cells(ligneLog, 2).Value = "Le projet lu dans 'Résultats' pour 'Élève 2' est :"
-    wsLog.Cells(ligneLog, 3).Value = projetObtenu
-    wsLog.Cells(ligneLog, 3).Font.Bold = True
-
-    ' --- ÉTAPE 2 : Lire la liste de vœux de "Élève 2" ---
-    ligneLog = ligneLog + 2
-    wsLog.Cells(ligneLog, 1).Value = "2. Recherche du rang dans les préférences"
-    
-    Dim ligneEleve As Long: ligneEleve = 0
-    For i = 2 To wsPrefsEleves.Cells(wsPrefsEleves.Rows.Count, "A").End(xlUp).Row
-        If Trim(wsPrefsEleves.Cells(i, "A").Value) = "Élève 2" Then
-            ligneEleve = i
-            Exit For
-        End If
-    Next i
-
-    ' --- ÉTAPE 3 : Comparer le projet affecté avec chaque vœu ---
-    If ligneEleve > 0 And projetObtenu <> "Non trouvé" Then
-        Dim j As Long, rangFinal As Long: rangFinal = 0
-        For j = 2 To wsPrefsEleves.Cells(ligneEleve, wsPrefsEleves.Columns.Count).End(xlToLeft).Column
-            ligneLog = ligneLog + 1
-            Dim voeuActuel As String: voeuActuel = Trim(wsPrefsEleves.Cells(ligneEleve, j).Value)
-            wsLog.Cells(ligneLog, 1).Value = "Vœu n°" & (j - 1)
-            wsLog.Cells(ligneLog, 2).Value = "Est-ce que '" & voeuActuel & "' = '" & projetObtenu & "' ?"
-            
-            If StrComp(voeuActuel, projetObtenu, vbTextCompare) = 0 Then
-                wsLog.Cells(ligneLog, 3).Value = "OUI"
-                wsLog.Range("A" & ligneLog & ":C" & ligneLog).Interior.Color = vbGreen
-                rangFinal = j - 1
-                Exit For ' On a trouvé, on arrête
-            Else
-                wsLog.Cells(ligneLog, 3).Value = "NON"
-            End If
-        Next j
-        
-        ligneLog = ligneLog + 2
-        wsLog.Cells(ligneLog, 1).Value = "3. Conclusion du calcul"
-        wsLog.Cells(ligneLog, 2).Value = "Le rang calculé est :"
-        wsLog.Cells(ligneLog, 3).Value = rangFinal
-        wsLog.Cells(ligneLog, 3).Font.Bold = True
-        
-    Else
-        ligneLog = ligneLog + 1
-        wsLog.Cells(ligneLog, 2).Value = "Impossible de calculer le rang car les données de base sont introuvables."
-    End If
-    
-    wsLog.Columns.AutoFit
-    Application.ScreenUpdating = True
-    MsgBox "Le diagnostic du calcul de rang est terminé. Veuillez inspecter la feuille 'Log_Affectation'."
-
-End Sub
-
-'****************************************************************************************
-' MACRO DE VÉRIFICATION FINALE (Nouvelle Approche de Lecture)
-'****************************************************************************************
-Sub VerifierToutesLesDonnees()
-
-    ' --- Déclarations ---
-    Dim wsResultats As Worksheet, wsPrefsEleves As Worksheet, wsVerif As Worksheet
-    Dim affectations As Object, prefsEleves As Object
-    
-    ' --- Initialisation ---
-    Set affectations = CreateObject("Scripting.Dictionary")
-    Set prefsEleves = CreateObject("Scripting.Dictionary")
-
-    ' --- Association des feuilles ---
-    On Error Resume Next
-    Set wsResultats = ThisWorkbook.Sheets("Résultats")
-    Set wsPrefsEleves = ThisWorkbook.Sheets("Préférences_Élèves")
-    ' Crée ou vide la feuille de vérification
-    Set wsVerif = ThisWorkbook.Sheets("Verification_Finale")
-    If wsVerif Is Nothing Then
-        Set wsVerif = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
-        wsVerif.Name = "Verification_Finale"
-    End If
-    On Error GoTo 0
-    
-    Application.ScreenUpdating = False
-    wsVerif.Cells.Clear
-
-    ' --- ÉTAPE 1 : Lire toutes les données ---
-    Dim i As Long, j As Long, eleve As Variant
-    ' Lecture Affectations
-    For i = 2 To wsResultats.Cells(wsResultats.Rows.Count, "A").End(xlUp).Row
-        Dim projetAffecte As String: projetAffecte = Trim(wsResultats.Cells(i, 1).Value)
-        Dim listeElevesStr As String: listeElevesStr = Trim(wsResultats.Cells(i, 2).Value)
-        If listeElevesStr <> "Aucun" And listeElevesStr <> "" Then
-            Dim elevesAffectesArray As Variant: elevesAffectesArray = Split(listeElevesStr, ", ")
-            For Each eleve In elevesAffectesArray
-                affectations(Trim(eleve)) = projetAffecte
-            Next eleve
-        End If
-    Next i
-    
-    ' --- LECTURE DES PRÉFÉRENCES (NOUVELLE LOGIQUE FIABLE) ---
-    For i = 2 To wsPrefsEleves.Cells(wsPrefsEleves.Rows.Count, "A").End(xlUp).Row
-        Dim nomEleve As String: nomEleve = Trim(wsPrefsEleves.Cells(i, 1).Value)
-        If nomEleve <> "" Then
-            ' On crée la collection DIRECTEMENT dans le dictionnaire pour cet élève
-            Set prefsEleves(nomEleve) = New Collection
-            
-            ' On remplit la collection qui est DÉJÀ dans le dictionnaire
-            For j = 2 To wsPrefsEleves.Cells(i, wsPrefsEleves.Columns.Count).End(xlToLeft).Column
-                prefsEleves(nomEleve).Add Trim(wsPrefsEleves.Cells(i, j).Value)
-            Next j
-        End If
-    Next i
-
-    ' --- ÉTAPE 2 : Écrire les données brutes dans la feuille de vérification ---
-    wsVerif.Range("A1:C1").Value = Array("Élève", "Projet Affecté (lu)", "Rang Calculé")
-    wsVerif.Range("D1").Value = "Vœux de l'élève (lus) ->"
-    wsVerif.Range("A1:D1").Font.Bold = True
-    
-    Dim ligneVerif As Long: ligneVerif = 1
-    
-    For Each eleve In prefsEleves.Keys
-        ligneVerif = ligneVerif + 1
-        wsVerif.Cells(ligneVerif, 1).Value = eleve
-        
-        If affectations.Exists(eleve) Then
-            wsVerif.Cells(ligneVerif, 2).Value = affectations(eleve)
-        Else
-            wsVerif.Cells(ligneVerif, 2).Value = "Non affecté"
-        End If
-        
-        Dim listeDeChoix As Collection: Set listeDeChoix = prefsEleves(eleve)
-        For j = 1 To listeDeChoix.Count
-            wsVerif.Cells(ligneVerif, 3 + j).Value = listeDeChoix(j)
-        Next j
-    Next eleve
-    
-    ' --- ÉTAPE 3 : Calculer le rang avec une formule Excel ---
-    For i = 2 To ligneVerif
-        If wsVerif.Cells(i, 2).Value <> "Non affecté" And wsVerif.Cells(i, 2).Value <> "" Then
-            wsVerif.Cells(i, 3).FormulaR1C1 = "=IFERROR(MATCH(RC2, RC4:RC100, 0), ""Non trouvé"")"
-        Else
-            wsVerif.Cells(i, 3).Value = "N/A"
-        End If
-    Next i
-    
-    wsVerif.Columns.AutoFit
-    Application.ScreenUpdating = True
-    MsgBox "La feuille 'Verification_Finale' a été créée avec la nouvelle méthode de lecture. Veuillez l'inspecter.", vbInformation
-
-End Sub
-'****************************************************************************************
-' MACRO : Créer un tableau de bord graphique avec étiquettes de données
-'****************************************************************************************
-Sub CreerDashboard()
-
-    ' --- Déclarations ---
-    Dim wsBilan As Worksheet, wsDashboard As Worksheet
-    Dim cht As ChartObject
-    Dim dataRange As Range, labelsRange As Range
-
-    ' --- Association des feuilles ---
-    On Error Resume Next
-    Set wsBilan = ThisWorkbook.Sheets("Bilan_Performance")
-    ' Crée ou vide la feuille de Dashboard
-    Set wsDashboard = ThisWorkbook.Sheets("Dashboard")
-    If wsDashboard Is Nothing Then
-        Set wsDashboard = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
-        wsDashboard.Name = "Dashboard"
-    End If
-    On Error GoTo 0
-
-    If wsBilan Is Nothing Then
-        MsgBox "Erreur : La feuille 'Bilan_Performance' est introuvable. Veuillez d'abord exécuter la macro de bilan.", vbCritical
-        Exit Sub
-    End If
-
-    Application.ScreenUpdating = False
-    wsDashboard.Cells.Clear
-    ' Supprime les anciens graphiques pour éviter les doublons
-    For Each cht In wsDashboard.ChartObjects
-        cht.Delete
-    Next cht
-
-    ' --- GRAPHIQUE 1 : Répartition des Élèves (Barres) ---
-    Set dataRange = wsBilan.Range("B3:B5")
-    Set labelsRange = wsBilan.Range("A3:A5")
-    
-    Set cht = wsDashboard.ChartObjects.Add(Left:=50, Top:=30, Width:=400, Height:=250)
-    With cht.Chart
-        .SetSourceData Source:=dataRange
-        .ChartType = xlColumnClustered
-        .HasTitle = True
-        .ChartTitle.Text = "Répartition des Élèves"
-        .SeriesCollection(1).XValues = labelsRange
-        .HasLegend = False
-        .Axes(xlValue).HasTitle = True
-        .Axes(xlValue).AxisTitle.Text = "Nombre d'élèves"
-        .ApplyDataLabels ' NOUVEAU : Ajout des étiquettes
-    End With
-
-    ' --- GRAPHIQUE 2 : Satisfaction des Vœux (Histogramme) ---
-    Set dataRange = wsBilan.Range("B11:B13")
-    Set labelsRange = wsBilan.Range("A11:A13")
-
-    Set cht = wsDashboard.ChartObjects.Add(Left:=500, Top:=30, Width:=400, Height:=250)
-    With cht.Chart
-        .SetSourceData Source:=dataRange
-        .ChartType = xlColumnClustered
-        .HasTitle = True
-        .ChartTitle.Text = "Satisfaction des Vœux"
-        .SeriesCollection(1).Name = "Nombre d'élèves"
-        .SeriesCollection(1).XValues = labelsRange
-        .HasLegend = False
-        .Axes(xlValue).HasTitle = True
-        .Axes(xlValue).AxisTitle.Text = "Nombre d'élèves"
-        .ApplyDataLabels ' NOUVEAU : Ajout des étiquettes
-    End With
-
-    ' --- GRAPHIQUE 3 : Performance des Projets (Barres Horizontales) ---
-    Set dataRange = wsBilan.Range("B18:B19")
-    Set labelsRange = wsBilan.Range("A18:A19")
-
-    Set cht = wsDashboard.ChartObjects.Add(Left:=50, Top:=300, Width:=400, Height:=250)
-    With cht.Chart
-        .SetSourceData Source:=dataRange
-        .ChartType = xlBarClustered
-        .HasTitle = True
-        .ChartTitle.Text = "Performance des Projets"
-        .SeriesCollection(1).Name = "Nombre de projets"
-        .SeriesCollection(1).XValues = labelsRange
-        .HasLegend = False
-        .Axes(xlValue).HasTitle = True
-        .Axes(xlValue).AxisTitle.Text = "Nombre de projets"
-        .ApplyDataLabels ' NOUVEAU : Ajout des étiquettes
-    End With
-
-    Application.ScreenUpdating = True
-    wsDashboard.Activate
-
-End Sub
+    For i = 1 To coll.Count: arr(i) = coll(i): Next i
+    CollectionToArray = arr
+End Function
