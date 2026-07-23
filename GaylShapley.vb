@@ -158,15 +158,15 @@ Sub GenererDonneesDeTest()
         Dim projUsed() As Boolean
         ReDim projUsed(1 To nbProjets)
 
-        Dim pos As Long
+        Dim pos As Long, votesP() As Long, pIdx As Long, maxV As Long, winner As Long
         For pos = 1 To nbProjets
-            Dim votesP() As Long: ReDim votesP(1 To nbProjets)
+            ReDim votesP(1 To nbProjets)
 
             For i = 1 To nbM
                 ' Premier choix restant de ce membre
                 For j = 1 To nbProjets
                     ' Index du projet : "Projet A"=1, "Projet B"=2, etc.
-                    Dim pIdx As Long: pIdx = Asc(Mid(prefsMembres(i, j), 8, 1)) - 64
+                    pIdx = Asc(Mid(prefsMembres(i, j), 8, 1)) - 64
                     If Not projUsed(pIdx) Then
                         votesP(pIdx) = votesP(pIdx) + 1
                         Exit For
@@ -175,8 +175,8 @@ Sub GenererDonneesDeTest()
             Next i
 
             ' Projet gagnant : le plus de votes (ex-aequo : indice le plus bas)
-            Dim maxV As Long: maxV = -1
-            Dim winner As Long: winner = 0
+            maxV = -1
+            winner = 0
             For j = 1 To nbProjets
                 If Not projUsed(j) And votesP(j) > maxV Then
                     maxV = votesP(j): winner = j
