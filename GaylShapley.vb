@@ -633,6 +633,14 @@ End Sub
 Sub CreerRapportSatisfaction()
 
     Dim wsR As Worksheet, wsPE As Worksheet, wsRapport As Worksheet
+    Dim affectations As Object, prefsEquipes As Object
+    Dim i As Long, j As Long
+    Dim projetAff As String, listeStr As String, arr As Variant, eq As Variant
+    Dim nomEq As String
+    Dim rangsObtenus As Collection, ligneRap As Long
+    Dim equipe As Variant
+    Dim projetObtenu As String, rang As Long, prefs As Collection
+    Dim somme As Double, ri As Variant, moyenne As Double, sc As Double, ecartType As Double
 
     On Error Resume Next
     Set wsR       = ThisWorkbook.Sheets("Résultats")
@@ -646,9 +654,7 @@ Sub CreerRapportSatisfaction()
     Application.ScreenUpdating = False
 
     ' Lecture affectations équipe -> projet depuis Résultats
-    Dim affectations As Object: Set affectations = CreateObject("Scripting.Dictionary")
-    Dim i As Long, j As Long
-    Dim projetAff As String, listeStr As String, arr As Variant, eq As Variant
+    Set affectations = CreateObject("Scripting.Dictionary")
     For i = 2 To wsR.Cells(wsR.Rows.Count, "A").End(xlUp).Row
         projetAff = Trim(wsR.Cells(i, 1).Value)
         listeStr  = Trim(wsR.Cells(i, 2).Value)
@@ -659,8 +665,7 @@ Sub CreerRapportSatisfaction()
     Next i
 
     ' Lecture des préférences des équipes
-    Dim prefsEquipes As Object: Set prefsEquipes = CreateObject("Scripting.Dictionary")
-    Dim nomEq As String
+    Set prefsEquipes = CreateObject("Scripting.Dictionary")
     For i = 2 To wsPE.Cells(wsPE.Rows.Count, "A").End(xlUp).Row
         nomEq = Trim(wsPE.Cells(i, 1).Value)
         If nomEq <> "" Then
@@ -676,12 +681,7 @@ Sub CreerRapportSatisfaction()
     wsRapport.Range("A1:C1").Value = Array("Équipe", "Projet Affecté", "Rang du Choix")
     wsRapport.Range("A1:C1").Font.Bold = True
 
-    Dim rangsObtenus As New Collection
-    Dim ligneRap As Long: ligneRap = 1
-    Dim equipe As Variant
-    Dim projetObtenu As String, rang As Long, prefs As Collection
-    Dim somme As Double, ri As Variant, moyenne As Double, sc As Double, ecartType As Double
-
+    ligneRap = 1
     For Each equipe In prefsEquipes.Keys
         ligneRap = ligneRap + 1
         wsRapport.Cells(ligneRap, 1).Value = equipe
@@ -738,6 +738,18 @@ Sub BilanPerformanceAlgorithme()
 
     Dim wsR As Worksheet, wsPE As Worksheet, wsP As Worksheet
     Dim wsBilan As Worksheet, wsDetails As Worksheet
+    Dim i As Long, j As Long, eq As Variant, projet As Variant
+    Dim nomP As String, listeStr As String, arr As Variant, nomEq As String
+    Dim affectationsEquipe As Object, affectationsProjet As Object
+    Dim prefsEquipes As Object, projetsCapacites As Object
+    Dim nbEquipesTotal As Long, nbEquipesAffectees As Long
+    Dim nbChoix1 As Long, nbChoix2 As Long, nbChoix3 As Long
+    Dim rangsObtenus As Collection, equipesSansProjet As Collection
+    Dim rang As Long, prefs As Collection, nbAff As Long
+    Dim somme As Double, sc As Double, ri As Variant
+    Dim projetsSousMinimum As Collection, projetsVides As Collection
+    Dim nbProjetsMinAtteint As Long, rangMoyen As Double, ecartType As Double
+    Dim ligne As Long, ld As Long
 
     On Error Resume Next
     Set wsR       = ThisWorkbook.Sheets("Résultats")
@@ -759,14 +771,11 @@ Sub BilanPerformanceAlgorithme()
     wsBilan.Cells.Clear
     wsDetails.Cells.Clear
 
-    Dim i As Long, j As Long, eq As Variant, projet As Variant
-    Dim nomP As String, listeStr As String, arr As Variant, nomEq As String
-
     ' ---- Lecture des données ----
-    Dim affectationsEquipe As Object: Set affectationsEquipe  = CreateObject("Scripting.Dictionary")
-    Dim affectationsProjet As Object: Set affectationsProjet  = CreateObject("Scripting.Dictionary")
-    Dim prefsEquipes As Object:       Set prefsEquipes        = CreateObject("Scripting.Dictionary")
-    Dim projetsCapacites As Object:   Set projetsCapacites    = CreateObject("Scripting.Dictionary")
+    Set affectationsEquipe  = CreateObject("Scripting.Dictionary")
+    Set affectationsProjet  = CreateObject("Scripting.Dictionary")
+    Set prefsEquipes        = CreateObject("Scripting.Dictionary")
+    Set projetsCapacites    = CreateObject("Scripting.Dictionary")
 
     For i = 2 To wsR.Cells(wsR.Rows.Count, "A").End(xlUp).Row
         nomP = Trim(wsR.Cells(i, 1).Value)
@@ -799,18 +808,13 @@ Sub BilanPerformanceAlgorithme()
     Next i
 
     ' ---- Calcul des métriques ----
-    Dim nbEquipesTotal As Long:     nbEquipesTotal     = prefsEquipes.Count
-    Dim nbEquipesAffectees As Long: nbEquipesAffectees = affectationsEquipe.Count
-    Dim nbChoix1 As Long, nbChoix2 As Long, nbChoix3 As Long
-    Dim rangsObtenus As New Collection
-    Dim equipesSansProjet As New Collection
-    Dim rang As Long, prefs As Collection, nbAff As Long
-    Dim somme As Double, sc As Double, ri As Variant
-    Dim projetsSousMinimum As New Collection
-    Dim projetsVides As New Collection
-    Dim nbProjetsMinAtteint As Long: nbProjetsMinAtteint = 0
-    Dim rangMoyen As Double, ecartType As Double
-    Dim ligne As Long, ld As Long
+    nbEquipesTotal     = prefsEquipes.Count
+    nbEquipesAffectees = affectationsEquipe.Count
+    Set rangsObtenus = New Collection
+    Set equipesSansProjet = New Collection
+    Set projetsSousMinimum = New Collection
+    Set projetsVides = New Collection
+    nbProjetsMinAtteint = 0
 
     For Each eq In prefsEquipes.Keys
         If affectationsEquipe.Exists(eq) Then
