@@ -262,9 +262,22 @@ End Sub
 ' Feuille écrite   : Résultats
 '================================================================================================
 Sub AffectationEquipesProjets()
-
+    ' === DÉCLARATIONS COMPLÈTES AU DÉBUT ===
     Dim wsEq As Worksheet, wsPE As Worksheet, wsP As Worksheet, wsR As Worksheet
+    Dim i As Long, j As Long
+    Dim nomEq As String, taille As Long, nomP As String
+    Dim equipesTaille As Object
+    Dim projetsMinEq As Object, projetsMaxEq As Object, projetsTailleMin As Object, projetsTailleMax As Object
+    Dim projetsRangs As Object, affectationsProjet As Object
+    Dim lastCol As Long, rangsDict As Object, eqH As String
+    Dim equipePrefs As Object, celibataires As Collection
+    Dim propositionsFaites As Object, affectationEquipe As Object
+    Dim tEq As Long, pNom As String, prefsFiltrees As Collection
+    Dim equipeActuelle As String, indexProp As Long, projetVise As String
+    Dim affectesAuProjet As Object, maxEqP As Long, pireEquipe As String
+    Dim rangPire As Long, eAff As Variant, rangNouvelle As Long
 
+    ' === DÉBUT DU CODE EXÉCUTABLE ===
     On Error Resume Next
     Set wsEq = ThisWorkbook.Sheets("Équipes")
     Set wsPE = ThisWorkbook.Sheets("Préférences_Équipes")
@@ -277,11 +290,8 @@ Sub AffectationEquipesProjets()
 
     Application.ScreenUpdating = False
 
-    Dim i As Long, j As Long
-    Dim nomEq As String, taille As Long, nomP As String
-
     ' ---- Lecture des tailles d'équipes ----
-    Dim equipesTaille As Object: Set equipesTaille = CreateObject("Scripting.Dictionary")
+    Set equipesTaille = CreateObject("Scripting.Dictionary")
     For i = 2 To wsEq.Cells(wsEq.Rows.Count, "A").End(xlUp).Row
         nomEq = Trim(wsEq.Cells(i, 1).Value)
         If nomEq <> "" Then
@@ -322,11 +332,10 @@ Sub AffectationEquipesProjets()
 
     ' ---- Lecture des préférences + pré-filtrage des incompatibilités de taille ----
     ' Les projets incompatibles avec la taille de l'équipe sont retirés dès la lecture.
-    Dim equipePrefs As Object:        Set equipePrefs       = CreateObject("Scripting.Dictionary")
-    Dim celibataires As New Collection
-    Dim propositionsFaites As Object: Set propositionsFaites = CreateObject("Scripting.Dictionary")
-    Dim affectationEquipe As Object:  Set affectationEquipe  = CreateObject("Scripting.Dictionary")
-    Dim tEq As Long, pNom As String, prefsFiltrees As Collection
+    Set equipePrefs = CreateObject("Scripting.Dictionary")
+    Set celibataires = New Collection
+    Set propositionsFaites = CreateObject("Scripting.Dictionary")
+    Set affectationEquipe = CreateObject("Scripting.Dictionary")
 
     For i = 2 To wsPE.Cells(wsPE.Rows.Count, "A").End(xlUp).Row
         nomEq = Trim(wsPE.Cells(i, 1).Value)
