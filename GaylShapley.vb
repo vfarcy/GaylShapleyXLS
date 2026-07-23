@@ -34,7 +34,7 @@ Sub GenererDonneesDeTest()
     Application.ScreenUpdating = False
     Randomize
 
-    Dim i As Long, j As Long, k As Long, r As Long
+    Dim i As Long, j As Long, k As Long, r As Long, tmpL As Long
 
     ' ======================================================================
     ' ÉTAPE 1 : Préférences individuelles des élèves (Fisher-Yates)
@@ -76,7 +76,6 @@ Sub GenererDonneesDeTest()
     Dim elevesShuf() As Long
     ReDim elevesShuf(1 To nbEleves)
     For i = 1 To nbEleves: elevesShuf(i) = i: Next i
-    Dim tmpL As Long
     For i = nbEleves To 2 Step -1
         r = Int(i * Rnd) + 1
         tmpL = elevesShuf(i): elevesShuf(i) = elevesShuf(r): elevesShuf(r) = tmpL
@@ -304,16 +303,17 @@ Sub AffectationEquipesProjets()
     Dim affectationsProjet As Object: Set affectationsProjet = CreateObject("Scripting.Dictionary")
 
     Dim lastCol As Long: lastCol = wsP.Cells(1, wsP.Columns.Count).End(xlToLeft).Column
+    Dim rangsDict As Object, eqH As String, nomP As String
     For i = 2 To wsP.Cells(wsP.Rows.Count, "A").End(xlUp).Row
-        Dim nomP As String: nomP = Trim(wsP.Cells(i, 1).Value)
+        nomP = Trim(wsP.Cells(i, 1).Value)
         If nomP <> "" Then
             projetsMinEq(nomP)     = CLng(wsP.Cells(i, 2).Value)
             projetsMaxEq(nomP)     = CLng(wsP.Cells(i, 3).Value)
             projetsTailleMin(nomP)  = CLng(wsP.Cells(i, 4).Value)
             projetsTailleMax(nomP)  = CLng(wsP.Cells(i, 5).Value)
-            Dim rangsDict As Object: Set rangsDict = CreateObject("Scripting.Dictionary")
+            Set rangsDict = CreateObject("Scripting.Dictionary")
             For j = 6 To lastCol
-                Dim eqH As String: eqH = Trim(wsP.Cells(1, j).Value)
+                eqH = Trim(wsP.Cells(1, j).Value)
                 If eqH <> "" Then rangsDict(eqH) = CLng(wsP.Cells(i, j).Value)
             Next j
             Set projetsRangs(nomP) = rangsDict
@@ -327,14 +327,15 @@ Sub AffectationEquipesProjets()
     Dim celibataires As New Collection
     Dim propositionsFaites As Object: Set propositionsFaites = CreateObject("Scripting.Dictionary")
     Dim affectationEquipe As Object:  Set affectationEquipe  = CreateObject("Scripting.Dictionary")
+    Dim tEq As Long, pNom As String, prefsFiltrees As Collection
 
     For i = 2 To wsPE.Cells(wsPE.Rows.Count, "A").End(xlUp).Row
         nomEq = Trim(wsPE.Cells(i, 1).Value)
         If nomEq <> "" Then
-            Dim tEq As Long: tEq = equipesTaille(nomEq)
-            Dim prefsFiltrees As New Collection
+            tEq = equipesTaille(nomEq)
+            Set prefsFiltrees = New Collection
             For j = 2 To wsPE.Cells(i, wsPE.Columns.Count).End(xlToLeft).Column
-                Dim pNom As String: pNom = Trim(wsPE.Cells(i, j).Value)
+                pNom = Trim(wsPE.Cells(i, j).Value)
                 If projetsTailleMin.Exists(pNom) Then
                     If tEq >= projetsTailleMin(pNom) And tEq <= projetsTailleMax(pNom) Then
                         prefsFiltrees.Add pNom
@@ -349,19 +350,23 @@ Sub AffectationEquipesProjets()
     Next i
 
     ' ---- Algorithme de Gale-Shapley sur les équipes ----
+    Dim equipeActuelle As String, indexProp As Long, projetVise As String
+    Dim affectesAuProjet As Object, maxEqP As Long, pireEquipe As String
+    Dim rangPire As Long, eAff As Variant, rangNouvelle As Long
+
     While celibataires.Count > 0
-        Dim equipeActuelle As String: equipeActuelle = celibataires(1)
-        Dim indexProp As Long: indexProp = propositionsFaites(equipeActuelle) + 1
+        equipeActuelle = celibataires(1)
+        indexProp = propositionsFaites(equipeActuelle) + 1
 
         If indexProp > equipePrefs(equipeActuelle).Count Then
             ' L'équipe a épuisé tous ses vœux compatibles : reste non affectée
             celibataires.Remove 1
         Else
-            Dim projetVise As String: projetVise = equipePrefs(equipeActuelle)(indexProp)
+            projetVise = equipePrefs(equipeActuelle)(indexProp)
             propositionsFaites(equipeActuelle) = indexProp
 
-            Dim affectesAuProjet As Object: Set affectesAuProjet = affectationsProjet(projetVise)
-            Dim maxEqP As Long: maxEqP = projetsMaxEq(projetVise)
+            Set affectesAuProjet = affectationsProjet(projetVise)
+            maxEqP = projetsMaxEq(projetVise)
 
             If affectesAuProjet.Count < maxEqP Then
                 ' Place disponible : acceptation provisoire
@@ -370,16 +375,15 @@ Sub AffectationEquipesProjets()
                 celibataires.Remove 1
             Else
                 ' Projet plein : chercher la pire équipe actuellement acceptée
-                Dim pireEquipe As String: pireEquipe = ""
-                Dim rangPire As Long: rangPire = -1
-                Dim eAff As Variant
+                pireEquipe = ""
+                rangPire = -1
                 For Each eAff In affectesAuProjet.Keys
                     If affectesAuProjet(eAff) > rangPire Then
                         rangPire = affectesAuProjet(eAff): pireEquipe = eAff
                     End If
                 Next eAff
 
-                Dim rangNouvelle As Long: rangNouvelle = projetsRangs(projetVise)(equipeActuelle)
+                rangNouvelle = projetsRangs(projetVise)(equipeActuelle)
 
                 If rangNouvelle < rangPire Then
                     ' La nouvelle équipe est mieux classée : éviction
@@ -403,14 +407,13 @@ Sub AffectationEquipesProjets()
     wsR.Range("A1:C1").Value = Array("Projet", "Équipes Affectées", "Statut Capacité")
     wsR.Range("A1:C1").Font.Bold = True
     Dim ligneR As Long: ligneR = 2
-    Dim projet As Variant
+    Dim projet As Variant, listeEq As String, nbAff As Long
     For Each projet In affectationsProjet.Keys
         wsR.Cells(ligneR, 1).Value = projet
-        Dim listeEq As String
         listeEq = IIf(affectationsProjet(projet).Count > 0, Join(affectationsProjet(projet).Keys, ", "), "Aucune")
         wsR.Cells(ligneR, 2).Value = listeEq
         wsR.Cells(ligneR, 2).WrapText = True
-        Dim nbAff As Long: nbAff = affectationsProjet(projet).Count
+        nbAff = affectationsProjet(projet).Count
         If nbAff < projetsMinEq(projet) Then
             wsR.Cells(ligneR, 3).Value = "MINIMUM NON ATTEINT (" & nbAff & "/" & projetsMinEq(projet) & " équipes)"
             wsR.Cells(ligneR, 3).Interior.Color = vbYellow
@@ -454,13 +457,15 @@ Sub AffectationEquipesPasAPas()
     Dim ligneLog As Long: ligneLog = 1
 
     Dim i As Long, j As Long
+    Dim nomEq As String, taille As Long, nomP As String
+    Dim tEq As Long, pNom As String
 
     ' ---- Lecture des tailles d'équipes ----
     Dim equipesTaille As Object: Set equipesTaille = CreateObject("Scripting.Dictionary")
     For i = 2 To wsEq.Cells(wsEq.Rows.Count, "A").End(xlUp).Row
-        Dim nomEq As String: nomEq = Trim(wsEq.Cells(i, 1).Value)
+        nomEq = Trim(wsEq.Cells(i, 1).Value)
         If nomEq <> "" Then
-            Dim taille As Long: taille = 0
+            taille = 0
             For j = 2 To wsEq.Cells(i, wsEq.Columns.Count).End(xlToLeft).Column
                 If Trim(wsEq.Cells(i, j).Value) <> "" Then taille = taille + 1
             Next j
@@ -477,16 +482,17 @@ Sub AffectationEquipesPasAPas()
     Dim affectationsProjet As Object: Set affectationsProjet = CreateObject("Scripting.Dictionary")
 
     Dim lastCol As Long: lastCol = wsP.Cells(1, wsP.Columns.Count).End(xlToLeft).Column
+    Dim rangsDict As Object, eqH As String
     For i = 2 To wsP.Cells(wsP.Rows.Count, "A").End(xlUp).Row
-        Dim nomP As String: nomP = Trim(wsP.Cells(i, 1).Value)
+        nomP = Trim(wsP.Cells(i, 1).Value)
         If nomP <> "" Then
             projetsMinEq(nomP)     = CLng(wsP.Cells(i, 2).Value)
             projetsMaxEq(nomP)     = CLng(wsP.Cells(i, 3).Value)
             projetsTailleMin(nomP)  = CLng(wsP.Cells(i, 4).Value)
             projetsTailleMax(nomP)  = CLng(wsP.Cells(i, 5).Value)
-            Dim rangsDict As Object: Set rangsDict = CreateObject("Scripting.Dictionary")
+            Set rangsDict = CreateObject("Scripting.Dictionary")
             For j = 6 To lastCol
-                Dim eqH As String: eqH = Trim(wsP.Cells(1, j).Value)
+                eqH = Trim(wsP.Cells(1, j).Value)
                 If eqH <> "" Then rangsDict(eqH) = CLng(wsP.Cells(i, j).Value)
             Next j
             Set projetsRangs(nomP) = rangsDict
@@ -499,14 +505,15 @@ Sub AffectationEquipesPasAPas()
     Dim celibataires As New Collection
     Dim propositionsFaites As Object: Set propositionsFaites = CreateObject("Scripting.Dictionary")
     Dim affectationEquipe As Object:  Set affectationEquipe  = CreateObject("Scripting.Dictionary")
+    Dim prefsFiltrees As Collection
 
     For i = 2 To wsPE.Cells(wsPE.Rows.Count, "A").End(xlUp).Row
         nomEq = Trim(wsPE.Cells(i, 1).Value)
         If nomEq <> "" Then
-            Dim tEq As Long: tEq = equipesTaille(nomEq)
-            Dim prefsFiltrees As New Collection
+            tEq = equipesTaille(nomEq)
+            Set prefsFiltrees = New Collection
             For j = 2 To wsPE.Cells(i, wsPE.Columns.Count).End(xlToLeft).Column
-                Dim pNom As String: pNom = Trim(wsPE.Cells(i, j).Value)
+                pNom = Trim(wsPE.Cells(i, j).Value)
                 If projetsTailleMin.Exists(pNom) Then
                     If tEq >= projetsTailleMin(pNom) And tEq <= projetsTailleMax(pNom) Then
                         prefsFiltrees.Add pNom
@@ -521,23 +528,28 @@ Sub AffectationEquipesPasAPas()
     Next i
 
     ' ---- Algorithme de Gale-Shapley avec journalisation ----
+    Dim equipeActuelle As String, indexProp As Long, projetVise As String
+    Dim action As String, decision As String, statut As String
+    Dim affectesAuProjet As Object, maxEqP As Long, pireEquipe As String
+    Dim rangPire As Long, eAff As Variant, rangNouvelle As Long
+
     While celibataires.Count > 0
-        Dim equipeActuelle As String: equipeActuelle = celibataires(1)
-        Dim indexProp As Long: indexProp = propositionsFaites(equipeActuelle) + 1
+        equipeActuelle = celibataires(1)
+        indexProp = propositionsFaites(equipeActuelle) + 1
 
         If indexProp > equipePrefs(equipeActuelle).Count Then
             celibataires.Remove 1
             LogStep wsLog, ligneLog, equipeActuelle & " a épuisé sa liste de vœux.", "Reste non affectée.", "", GetCelibatairesString(celibataires)
         Else
-            Dim projetVise As String: projetVise = equipePrefs(equipeActuelle)(indexProp)
+            projetVise = equipePrefs(equipeActuelle)(indexProp)
             propositionsFaites(equipeActuelle) = indexProp
 
-            Dim action As String:   action   = equipeActuelle & " propose au " & projetVise & " (choix n°" & indexProp & ")."
-            Dim decision As String: decision = ""
-            Dim statut As String:   statut   = ""
+            action   = equipeActuelle & " propose au " & projetVise & " (choix n°" & indexProp & ")."
+            decision = ""
+            statut   = ""
 
-            Dim affectesAuProjet As Object: Set affectesAuProjet = affectationsProjet(projetVise)
-            Dim maxEqP As Long: maxEqP = projetsMaxEq(projetVise)
+            Set affectesAuProjet = affectationsProjet(projetVise)
+            maxEqP = projetsMaxEq(projetVise)
 
             If affectesAuProjet.Count < maxEqP Then
                 decision = "Le projet a de la place. ACCEPTATION PROVISOIRE."
@@ -545,16 +557,15 @@ Sub AffectationEquipesPasAPas()
                 affectationEquipe(equipeActuelle) = projetVise
                 celibataires.Remove 1
             Else
-                Dim pireEquipe As String: pireEquipe = ""
-                Dim rangPire As Long: rangPire = -1
-                Dim eAff As Variant
+                pireEquipe = ""
+                rangPire = -1
                 For Each eAff In affectesAuProjet.Keys
                     If affectesAuProjet(eAff) > rangPire Then
                         rangPire = affectesAuProjet(eAff): pireEquipe = eAff
                     End If
                 Next eAff
 
-                Dim rangNouvelle As Long: rangNouvelle = projetsRangs(projetVise)(equipeActuelle)
+                rangNouvelle = projetsRangs(projetVise)(equipeActuelle)
 
                 If rangNouvelle < rangPire Then
                     decision = "Plein. " & equipeActuelle & " est mieux classée que " & pireEquipe & ". ACCEPTATION et ÉVICTION."
@@ -581,14 +592,14 @@ Sub AffectationEquipesPasAPas()
     wsR.Range("A1:C1").Value = Array("Projet", "Équipes Affectées", "Statut Capacité")
     wsR.Range("A1:C1").Font.Bold = True
     Dim ligneR As Long: ligneR = 2
-    Dim projet As Variant
+    Dim projet As Variant, listeEq As String
+    Dim nbAff As Long
     For Each projet In affectationsProjet.Keys
         wsR.Cells(ligneR, 1).Value = projet
-        Dim listeEq As String
         listeEq = IIf(affectationsProjet(projet).Count > 0, Join(affectationsProjet(projet).Keys, ", "), "Aucune")
         wsR.Cells(ligneR, 2).Value = listeEq
         wsR.Cells(ligneR, 2).WrapText = True
-        Dim nbAff As Long: nbAff = affectationsProjet(projet).Count
+        nbAff = affectationsProjet(projet).Count
         If nbAff < projetsMinEq(projet) Then
             wsR.Cells(ligneR, 3).Value = "MINIMUM NON ATTEINT (" & nbAff & "/" & projetsMinEq(projet) & " équipes)"
             wsR.Cells(ligneR, 3).Interior.Color = vbYellow
@@ -630,20 +641,21 @@ Sub CreerRapportSatisfaction()
     ' Lecture affectations équipe -> projet depuis Résultats
     Dim affectations As Object: Set affectations = CreateObject("Scripting.Dictionary")
     Dim i As Long, j As Long
+    Dim projetAff As String, listeStr As String, arr As Variant, eq As Variant
     For i = 2 To wsR.Cells(wsR.Rows.Count, "A").End(xlUp).Row
-        Dim projetAff As String: projetAff = Trim(wsR.Cells(i, 1).Value)
-        Dim listeStr As String:  listeStr  = Trim(wsR.Cells(i, 2).Value)
+        projetAff = Trim(wsR.Cells(i, 1).Value)
+        listeStr  = Trim(wsR.Cells(i, 2).Value)
         If listeStr <> "Aucune" And listeStr <> "" Then
-            Dim arr As Variant: arr = Split(listeStr, ", ")
-            Dim eq As Variant
+            arr = Split(listeStr, ", ")
             For Each eq In arr: affectations(Trim(eq)) = projetAff: Next eq
         End If
     Next i
 
     ' Lecture des préférences des équipes
     Dim prefsEquipes As Object: Set prefsEquipes = CreateObject("Scripting.Dictionary")
+    Dim nomEq As String
     For i = 2 To wsPE.Cells(wsPE.Rows.Count, "A").End(xlUp).Row
-        Dim nomEq As String: nomEq = Trim(wsPE.Cells(i, 1).Value)
+        nomEq = Trim(wsPE.Cells(i, 1).Value)
         If nomEq <> "" Then
             Set prefsEquipes(nomEq) = New Collection
             For j = 2 To wsPE.Cells(i, wsPE.Columns.Count).End(xlToLeft).Column
@@ -660,15 +672,17 @@ Sub CreerRapportSatisfaction()
     Dim rangsObtenus As New Collection
     Dim ligneRap As Long: ligneRap = 1
     Dim equipe As Variant
+    Dim projetObtenu As String, rang As Long, prefs As Collection
+    Dim somme As Double, ri As Variant, moyenne As Double, sc As Double, ecartType As Double
 
     For Each equipe In prefsEquipes.Keys
         ligneRap = ligneRap + 1
         wsRapport.Cells(ligneRap, 1).Value = equipe
         If affectations.Exists(equipe) Then
-            Dim projetObtenu As String: projetObtenu = affectations(equipe)
+            projetObtenu = affectations(equipe)
             wsRapport.Cells(ligneRap, 2).Value = projetObtenu
-            Dim rang As Long: rang = 0
-            Dim prefs As Collection: Set prefs = prefsEquipes(equipe)
+            rang = 0
+            Set prefs = prefsEquipes(equipe)
             For j = 1 To prefs.Count
                 If StrComp(prefs(j), projetObtenu, vbTextCompare) = 0 Then rang = j: Exit For
             Next j
@@ -686,14 +700,12 @@ Sub CreerRapportSatisfaction()
 
     ' Statistiques (écart-type d'échantillon)
     If rangsObtenus.Count > 0 Then
-        Dim somme As Double: somme = 0
-        Dim ri As Variant
+        somme = 0
         For Each ri In rangsObtenus: somme = somme + ri: Next ri
-        Dim moyenne As Double: moyenne = somme / rangsObtenus.Count
+        moyenne = somme / rangsObtenus.Count
 
-        Dim sc As Double: sc = 0
+        sc = 0
         For Each ri In rangsObtenus: sc = sc + (ri - moyenne) ^ 2: Next ri
-        Dim ecartType As Double
         If rangsObtenus.Count > 1 Then ecartType = Sqr(sc / (rangsObtenus.Count - 1)) Else ecartType = 0
 
         ligneRap = ligneRap + 2
@@ -741,6 +753,7 @@ Sub BilanPerformanceAlgorithme()
     wsDetails.Cells.Clear
 
     Dim i As Long, j As Long, eq As Variant, projet As Variant
+    Dim nomP As String, listeStr As String, arr As Variant, nomEq As String
 
     ' ---- Lecture des données ----
     Dim affectationsEquipe As Object: Set affectationsEquipe  = CreateObject("Scripting.Dictionary")
@@ -749,11 +762,11 @@ Sub BilanPerformanceAlgorithme()
     Dim projetsCapacites As Object:   Set projetsCapacites    = CreateObject("Scripting.Dictionary")
 
     For i = 2 To wsR.Cells(wsR.Rows.Count, "A").End(xlUp).Row
-        Dim nomP As String: nomP = Trim(wsR.Cells(i, 1).Value)
-        Dim listeStr As String: listeStr = Trim(wsR.Cells(i, 2).Value)
+        nomP = Trim(wsR.Cells(i, 1).Value)
+        listeStr = Trim(wsR.Cells(i, 2).Value)
         Set affectationsProjet(nomP) = New Collection
         If listeStr <> "Aucune" And listeStr <> "" Then
-            Dim arr As Variant: arr = Split(listeStr, ", ")
+            arr = Split(listeStr, ", ")
             For Each eq In arr
                 affectationsEquipe(Trim(eq)) = nomP
                 affectationsProjet(nomP).Add Trim(eq)
@@ -762,7 +775,7 @@ Sub BilanPerformanceAlgorithme()
     Next i
 
     For i = 2 To wsPE.Cells(wsPE.Rows.Count, "A").End(xlUp).Row
-        Dim nomEq As String: nomEq = Trim(wsPE.Cells(i, 1).Value)
+        nomEq = Trim(wsPE.Cells(i, 1).Value)
         If nomEq <> "" Then
             Set prefsEquipes(nomEq) = New Collection
             For j = 2 To wsPE.Cells(i, wsPE.Columns.Count).End(xlToLeft).Column
@@ -784,11 +797,13 @@ Sub BilanPerformanceAlgorithme()
     Dim nbChoix1 As Long, nbChoix2 As Long, nbChoix3 As Long
     Dim rangsObtenus As New Collection
     Dim equipesSansProjet As New Collection
+    Dim rang As Long, prefs As Collection, nbAff As Long
+    Dim somme As Double, sc As Double, ri As Variant
 
     For Each eq In prefsEquipes.Keys
         If affectationsEquipe.Exists(eq) Then
-            Dim rang As Long: rang = 0
-            Dim prefs As Collection: Set prefs = prefsEquipes(eq)
+            rang = 0
+            Set prefs = prefsEquipes(eq)
             For j = 1 To prefs.Count
                 If StrComp(prefs(j), affectationsEquipe(eq), vbTextCompare) = 0 Then rang = j: Exit For
             Next j
@@ -810,7 +825,6 @@ Sub BilanPerformanceAlgorithme()
     Dim nbProjetsMinAtteint As Long: nbProjetsMinAtteint = 0
 
     For Each projet In projetsCapacites.Keys
-        Dim nbAff As Long
         nbAff = IIf(affectationsProjet.Exists(projet), affectationsProjet(projet).Count, 0)
         If nbAff = 0 Then projetsVides.Add projet
         If nbAff < projetsCapacites(projet)(0) Then
@@ -822,12 +836,11 @@ Sub BilanPerformanceAlgorithme()
 
     Dim rangMoyen As Double, ecartType As Double
     If rangsObtenus.Count > 0 Then
-        Dim somme As Double: somme = 0
-        Dim ri As Variant
+        somme = 0
         For Each ri In rangsObtenus: somme = somme + ri: Next ri
         rangMoyen = somme / rangsObtenus.Count
         If rangsObtenus.Count > 1 Then
-            Dim sc As Double: sc = 0
+            sc = 0
             For Each ri In rangsObtenus: sc = sc + (ri - rangMoyen) ^ 2: Next ri
             ecartType = Sqr(sc / (rangsObtenus.Count - 1))
         End If
