@@ -304,7 +304,7 @@ Sub AffectationEquipesProjets()
     Dim affectationsProjet As Object: Set affectationsProjet = CreateObject("Scripting.Dictionary")
 
     Dim lastCol As Long: lastCol = wsP.Cells(1, wsP.Columns.Count).End(xlToLeft).Column
-    Dim rangsDict As Object, eqH As String, nomP As String
+    Dim rangsDict As Object, eqH As String
     For i = 2 To wsP.Cells(wsP.Rows.Count, "A").End(xlUp).Row
         nomP = Trim(wsP.Cells(i, 1).Value)
         If nomP <> "" Then
