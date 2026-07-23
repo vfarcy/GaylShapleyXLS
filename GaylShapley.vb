@@ -130,16 +130,16 @@ Sub GenererDonneesDeTest()
     ' de l'équipe. En cas d'égalité, le projet d'indice le plus bas gagne.
     ' ======================================================================
     Dim wsPE As Worksheet: Set wsPE = ThisWorkbook.Sheets("Préférences_Équipes")
-    wsPE.Cells.Clear
-    wsPE.Cells(1, 1).Value = "Équipe"
-    For i = 1 To nbProjets: wsPE.Cells(1, 1 + i).Value = "Choix " & i: Next i
-    wsPE.Rows(1).Font.Bold = True
-
     Dim eq As Long, nbM As Long, debut As Long, eNum As Long
     Dim prefsMembres() As String
     Dim projUsed() As Boolean
     Dim pos As Long, pIdx As Long, maxV As Long, winner As Long
     Dim votesP() As Long
+
+    wsPE.Cells.Clear
+    wsPE.Cells(1, 1).Value = "Équipe"
+    For i = 1 To nbProjets: wsPE.Cells(1, 1 + i).Value = "Choix " & i: Next i
+    wsPE.Rows(1).Font.Bold = True
 
     For eq = 1 To nbEquipes
         wsPE.Cells(eq + 1, 1).Value = "Équipe " & eq
