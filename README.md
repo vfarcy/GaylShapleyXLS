@@ -1,71 +1,153 @@
-# GaylShapleyXLS — Algorithme de Gale-Shapley en VBA Excel
+# GaylShapleyXLS — Affectation d'équipes aux projets par l'algorithme de Gale-Shapley
 
-Implémentation de l'**algorithme de Gale-Shapley** (affectation stable) pour assigner des élèves à des projets directement dans Excel via des macros VBA.
+Implémentation en **VBA Excel** de l'algorithme de Gale-Shapley pour affecter des **équipes d'élèves** à des projets de manière stable et optimale selon les préférences de chacun.
 
 ---
 
-## Feuilles Excel attendues
+## Contexte et problème résolu
 
-| Feuille | Rôle |
+Dans un contexte pédagogique (école d'ingénieurs, university), des élèves se regroupent en équipes et doivent être affectés à des projets. Chaque équipe classe les projets par ordre de préférence, et chaque projet classe les équipes candidates. Les projets ont des contraintes de capacité (nombre minimum et maximum d'équipes acceptées, fourchette de taille d'équipe acceptable).
+
+L'objectif est de produire une **affectation stable** : il n'existe aucune paire (équipe, projet) où l'équipe préférerait ce projet à son affectation actuelle ET le projet préférerait cette équipe à au moins une équipe déjà affectée.
+
+---
+
+## L'algorithme de Gale-Shapley
+
+### Principe général
+
+L'algorithme de Gale-Shapley (1962, prix Nobel d'économie 2012) résout le **problème d'affectation stable**. Dans sa forme originale, il s'applique à des couples (mariage stable). Ici, il est adapté à un contexte *many-to-one* avec capacités : plusieurs équipes peuvent être affectées à un même projet.
+
+### Adaptation utilisée : variante "équipes-proposantes"
+
+Dans cette implémentation, ce sont les **équipes** qui font les propositions (et non les projets). Cela produit une affectation **optimale du côté des équipes** : aucune équipe ne peut obtenir un meilleur résultat dans aucune affectation stable.
+
+### Déroulement pas à pas
+
+**Initialisation :**
+- Toutes les équipes sont « libres » (non affectées).
+- Chaque équipe possède un compteur `propositionsFaites` initialisé à 0.
+- Les projets incompatibles avec la taille d'une équipe sont **retirés au préalable** de sa liste de vœux.
+
+**Itérations (tant qu'il reste des équipes libres) :**
+
+1. On prend la première équipe libre de la file d'attente.
+2. Elle propose au prochain projet de sa liste (celui qu'elle n'a pas encore sollicité).
+3. **Cas A — Le projet a de la place** (nombre d'équipes acceptées < capacité max) :
+   - Le projet accepte l'équipe **provisoirement**.
+   - L'équipe sort de la file des libres.
+4. **Cas B — Le projet est plein** :
+   - Le projet compare le rang de la nouvelle équipe avec celui de la **pire équipe** actuellement acceptée.
+   - **Si la nouvelle équipe est mieux classée** : la pire équipe est **évincée** (elle retourne dans la file des libres), et la nouvelle équipe est acceptée provisoirement.
+   - **Si la nouvelle équipe est moins bien classée** : elle est **rejetée** et retourne en fin de file pour tenter son prochain vœu.
+5. Si une équipe a épuisé toute sa liste de vœux compatibles, elle reste **non affectée**.
+
+**Terminaison :**
+L'algorithme se termine nécessairement car à chaque proposition, une équipe avance dans sa liste (elle ne reviendra jamais sur un projet déjà refusé ou quitté). La liste étant finie, la convergence est garantie.
+
+### Propriété de stabilité
+
+À la fin, l'affectation est **stable** : si une équipe E préfère un projet P à son projet actuel, alors P a déjà rencontré E et l'a rejetée au profit d'équipes qu'il classe mieux. P ne voudra donc jamais prendre E au détriment de ses affectés.
+
+### Agrégation des préférences (vote majoritaire)
+
+Les préférences d'une équipe sont calculées à partir des préférences individuelles de ses membres via un **vote à la pluralité itérative** :
+
+1. À la position 1 : chaque membre vote pour son projet préféré parmi tous les projets. Le projet ayant reçu le plus de votes est placé en 1ère position dans la liste de l'équipe.
+2. Ce projet est retiré. On répète pour la position 2, etc.
+3. En cas d'égalité de votes, le projet d'indice alphabétique le plus bas gagne.
+
+### Classement des équipes par les projets
+
+Pour les données de test, le rang d'une équipe auprès d'un projet est calculé comme la **moyenne des rangs** que les membres de l'équipe accordent à ce projet dans leur liste individuelle :
+
+$$\text{score}(\text{équipe}, \text{projet}) = \frac{1}{|\text{équipe}|} \sum_{m \in \text{équipe}} \text{rang}_m(\text{projet})$$
+
+Un score **faible** = équipe enthousiaste = bien classée par le projet. Les équipes sont ensuite triées par score croissant pour obtenir le classement du projet.
+
+---
+
+## Structure du classeur Excel
+
+### Feuilles à créer manuellement
+
+| Feuille | Rôle | Alimentée par |
+|---|---|---|
+| `Préférences_Élèves` | Listes de vœux ordonnés de chaque élève | `GenererDonneesDeTest` |
+| `Équipes` | Composition des équipes (membres) | `GenererDonneesDeTest` |
+| `Préférences_Équipes` | Préférences agrégées de chaque équipe (vote majoritaire) | `GenererDonneesDeTest` |
+| `Préférences_Projets` | Capacités + classement des équipes par chaque projet | `GenererDonneesDeTest` |
+| `Résultats` | Équipes affectées à chaque projet + statut | Macros d'affectation |
+| `Rapport_Satisfaction` | Rang du vœu obtenu par chaque équipe | `CreerRapportSatisfaction` |
+| `Log_Affectation` | Journal détaillé étape par étape | `AffectationEquipesPasAPas` |
+| `Bilan_Performance` | Métriques globales de l'affectation | `BilanPerformanceAlgorithme` |
+
+### Feuilles créées automatiquement
+
+| Feuille | Créée par |
 |---|---|
-| `Préférences_Élèves` | Listes de vœux ordonnés des élèves |
-| `Préférences_Projets` | Listes de classement des élèves par projet + capacités Min/Max |
-| `Résultats` | Résultat de l'affectation |
-| `Rapport_Satisfaction` | Rapport d'analyse de satisfaction |
-| `Log_Affectation` | Journal pas à pas de l'algorithme |
-| `Bilan_Performance` | Métriques agrégées |
-| `Details_Suivi` | Listes de suivi (non affectés, sous-minimum) |
-| `Affectations_par_Projet` | Rapport croisé par projet |
-| `Dashboard` | Tableau de bord synthétique |
+| `Details_Suivi` | `BilanPerformanceAlgorithme` |
+
+### Structure de `Préférences_Projets`
+
+```
+| Projet | MinEquipes | MaxEquipes | TailleMinEquipe | TailleMaxEquipe | Équipe 1 | Équipe 2 | ...
+|--------|------------|------------|-----------------|-----------------|----------|----------|
+| Proj A |     1      |     3      |        2        |        4        |    2     |    1     | ...
+```
+
+- **MinEquipes / MaxEquipes** : nombre d'équipes que le projet doit/peut accueillir.
+- **TailleMinEquipe / TailleMaxEquipe** : fourchette de taille d'équipe acceptable. Une équipe hors fourchette est automatiquement exclue de ce projet.
+- Les colonnes suivantes contiennent le **rang** de chaque équipe (1 = équipe préférée).
 
 ---
 
 ## Description des macros
 
 ### 1. `GenererDonneesDeTest`
-Génère aléatoirement des données de test dans les feuilles de préférences. Utilise `System.Collections.ArrayList` pour un **Fisher-Yates shuffle** (mélange aléatoire). Demande à l'utilisateur le nombre d'élèves et de projets via `InputBox`.
+Génère l'ensemble des données de test en 4 étapes :
+1. Préférences individuelles aléatoires de chaque élève (mélange Fisher-Yates).
+2. Formation aléatoire des équipes (taille variable dans la fourchette saisie).
+3. Calcul des préférences des équipes par vote majoritaire.
+4. Calcul des classements des projets (basés sur la moyenne des rangs individuels).
 
-### 2. `AffectationElevesProjets`
-Implémentation principale de **Gale-Shapley côté projets** (les projets choisissent). La logique :
-- Les élèves célibataires proposent à leurs projets préférés
-- Le projet accepte provisoirement si une place est disponible
-- Si plein, le projet compare le nouvel arrivant au "pire" élève actuel et l'évince si meilleur
-- Termine quand plus aucun élève n'est célibataire
+Paramètres saisis via `InputBox` : nombre d'élèves, nombre de projets (max 26), taille min et max des équipes.
 
-> ⚠️ **Variante non standard** : ce n'est pas le Gale-Shapley classique où l'élève parcourt sa liste progressivement — ici l'élève boucle sur **toute** sa liste d'un coup dans un `For j`. L'algorithme peut ne pas converger si un élève évincé reprend au début.
+> Nécessite `System.Collections.ArrayList` (.NET Framework). Utilisez `TestArrayList` pour vérifier la disponibilité.
 
-### 3. `AffectationPasAPas`
-Même algorithme que `AffectationElevesProjets` mais avec journalisation détaillée dans `Log_Affectation` à chaque étape. Utilise `propositionsFaites` pour tracker le prochain vœu à soumettre. C'est la version la plus fidèle au Gale-Shapley classique.
+### 2. `AffectationEquipesProjets`
+Exécute l'algorithme de Gale-Shapley complet en une passe, sans journalisation. Plus rapide que la version pas à pas.
 
-### 4. `RapportSatisfactionEleves` / `CreerRapportSatisfaction`
-Deux versions d'un même rapport : calcule pour chaque élève le rang du projet obtenu dans sa liste de vœux, puis produit la **moyenne** et l'**écart-type** des rangs.
+### 3. `AffectationEquipesPasAPas`
+Même algorithme avec journalisation détaillée de chaque étape dans `Log_Affectation` :
+- Action de l'équipe (proposition)
+- Décision du projet (acceptation, éviction, rejet)
+- État courant du projet
+- Liste des équipes encore libres
 
-$$s = \sqrt{\frac{\sum(x_i - \bar{x})^2}{n-1}}$$
+### 4. `CreerRapportSatisfaction`
+Pour chaque équipe affectée, calcule le **rang** du projet obtenu dans sa liste de vœux agrégée. Produit en pied de tableau :
 
-*(écart-type d'échantillon)*
+$$\bar{x} = \frac{1}{n}\sum_{i=1}^{n} r_i \qquad s = \sqrt{\frac{\sum_{i=1}^{n}(r_i - \bar{x})^2}{n-1}}$$
 
-### 5. `CreerRapportProjets`
-Rapport croisé par projet : calcule séparément la satisfaction des élèves et la "qualité d'équipe" du point de vue du projet, avec moyenne et écart-type pour chaque.
+Un rang moyen proche de 1 indique une excellente satisfaction globale. L'écart-type mesure l'équité de la distribution.
 
-### 6. `BilanPerformanceAlgorithme`
-Métriques globales :
-- Taux d'affectation
-- Répartition des vœux obtenus (1er, 2ème, 3ème)
-- Taux de projets ayant atteint leur minimum de capacité
-- Taux d'occupation global
+### 5. `BilanPerformanceAlgorithme`
+Génère deux feuilles de synthèse :
 
-Génère également la feuille `Details_Suivi` et appelle `CreerDashboard`.
+**`Bilan_Performance`** (indicateurs clés) :
+- Taux d'affectation des équipes
+- Satisfaction moyenne et écart-type des rangs obtenus
+- Nombre d'équipes ayant obtenu leur 1er / 2ème / 3ème vœu
+- Taux de projets ayant atteint leur minimum d'équipes
 
-### 7. Macros de diagnostic
-Outils de débogage développés de manière itérative :
+**`Details_Suivi`** (listes de suivi) :
+- Équipes non affectées
+- Projets n'ayant pas atteint leur minimum
+- Projets sans aucune équipe
 
-| Macro | Rôle |
-|---|---|
-| `DiagnostiqueAffectation` | Vérifie la lecture des préférences dans le log |
-| `VerificationFinale_V2` | Affiche les données brutes pour "Élève 2" |
-| `DebugRang` | Trace le calcul du rang pour "Élève 2" pas à pas |
-| `VerifierToutesLesDonnees` | Relit toutes les données et affiche les rangs calculés |
-| `TestArrayList` | Vérifie la disponibilité de `System.Collections.ArrayList` |
+### 6. `TestArrayList`
+Vérifie que `System.Collections.ArrayList` est disponible sur la machine. À exécuter en cas d'erreur dans `GenererDonneesDeTest`.
 
 ---
 
@@ -73,33 +155,30 @@ Outils de débogage développés de manière itérative :
 
 ```
 GenererDonneesDeTest
-        ↓
-AffectationPasAPas  (ou AffectationElevesProjets)
-        ↓
-CreerRapportSatisfaction
-        ↓
-CreerRapportProjets
-        ↓
-BilanPerformanceAlgorithme  →  Dashboard
+        │
+        ▼
+AffectationEquipesPasAPas   ←── (ou AffectationEquipesProjets pour plus de rapidité)
+        │
+        ├──▶ CreerRapportSatisfaction
+        │
+        └──▶ BilanPerformanceAlgorithme
 ```
 
 ---
 
-## Problèmes connus / points d'attention
+## Limites connues
 
-| # | Problème | Impact |
+| # | Limite | Impact |
 |---|---|---|
-| 1 | **`Option Explicit` déclaré deux fois** (début du fichier et ~ligne 250) | Erreur de compilation |
-| 2 | **`AffectationElevesProjets` : boucle `For j` non standard** — l'élève parcourt toute sa liste en une passe, sans mémoriser où il en était | Non-convergence potentielle si un élève évincé reprend depuis le début |
-| 3 | **`System.Collections.ArrayList`** utilisé dans `GenererDonneesDeTest` — nécessite `.NET Framework`, non disponible sur toutes les machines | Erreur à l'exécution (`TestArrayList` permet de diagnostiquer) |
-| 4 | **Macros de diagnostic codées en dur** sur "Élève 2" (`DebugRang`, `VerificationFinale_V2`) | Code de débogage à nettoyer avant livraison |
-| 5 | **`CreerDashboard`** appelée dans `BilanPerformanceAlgorithme` mais non définie dans ce fichier | Erreur d'exécution si absente d'un autre module VBA |
-| 6 | **Pas de gestion d'erreur** si un élève n'existe pas dans le classement d'un projet (`projetsPrefs(projetVise)(eleveActuel)` peut lever une erreur) | Runtime error possible sur données incomplètes |
+| 1 | **Maximum 26 projets** — les noms de projets sont "Projet A" à "Projet Z" | Limitation de la génération de test uniquement |
+| 2 | **`System.Collections.ArrayList`** nécessite `.NET Framework` | Erreur dans `GenererDonneesDeTest` sur certaines machines |
+| 3 | **Ex-aequo dans les classements** — deux équipes avec le même score reçoivent le même rang (le rang suivant est sauté) | Comportement équitable mais non déterministe en cas d'éviction |
+| 4 | **Vote majoritaire** — peut produire des cycles de Condorcet ; l'implémentation les résout en faveur de l'indice le plus bas | Cas rare, impact marginal |
 
 ---
 
 ## Prérequis
 
-- Microsoft Excel avec macros activées
-- `.NET Framework` installé (pour `System.Collections.ArrayList`)
-- Feuilles listées ci-dessus créées au préalable (sauf `Details_Suivi` et `Verification_Finale` créées automatiquement)
+- Microsoft Excel (Windows) avec macros activées, sauvegardé en `.xlsm`
+- `.NET Framework` installé (pour `System.Collections.ArrayList` dans la génération de test)
+- Feuilles listées dans "Structure du classeur" créées avant la première exécution
