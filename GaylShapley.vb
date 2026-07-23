@@ -87,17 +87,17 @@ Sub GenererDonneesDeTest()
     ReDim eqDebut(1 To nbEleves): ReDim eqTaille(1 To nbEleves)
     Dim nbEquipes As Long: nbEquipes = 0
     Dim cursor As Long: cursor = 1
+    Dim restants As Long, taille As Long, maxT As Long
 
     Do While cursor <= nbEleves
         nbEquipes = nbEquipes + 1
         eqDebut(nbEquipes) = cursor
-        Dim restants As Long: restants = nbEleves - cursor + 1
-        Dim taille As Long
+        restants = nbEleves - cursor + 1
         If restants <= tailleMax Then
             taille = restants ' Dernière équipe : prend tous les élèves restants
         Else
             ' S'assurer que les élèves restants après cette équipe formeront une équipe valide
-            Dim maxT As Long: maxT = restants - tailleMin
+            maxT = restants - tailleMin
             If maxT > tailleMax Then maxT = tailleMax
             If maxT < tailleMin Then
                 taille = restants
@@ -208,6 +208,10 @@ Sub GenererDonneesDeTest()
     wsP.Rows(1).Font.Bold = True
 
     Dim minEq As Long, maxEq As Long
+    Dim projetNom As String, scoreTotal As Double
+    Dim scores() As Double, eNo As Long
+    Dim rang As Long, rangs() As Long
+    
     For i = 1 To nbProjets
         wsP.Cells(i + 1, 1).Value = "Projet " & Chr(64 + i)
         minEq = Application.WorksheetFunction.RandBetween(1, 2)
@@ -218,14 +222,12 @@ Sub GenererDonneesDeTest()
         wsP.Cells(i + 1, 5).Value = tailleMax    ' dans la fourchette globale de génération
 
         ' Calcul des scores : score(eq) = moyenne du rang du projet chez les membres de eq
-        Dim projetNom As String: projetNom = "Projet " & Chr(64 + i)
-        Dim scoreTotal As Double
-        Dim scores() As Double
+        projetNom = "Projet " & Chr(64 + i)
         ReDim scores(1 To nbEquipes)
         For eq = 1 To nbEquipes
             scoreTotal = 0
             For j = 1 To eqTaille(eq)
-                Dim eNo As Long: eNo = elevesShuf(eqDebut(eq) + j - 1)
+                eNo = elevesShuf(eqDebut(eq) + j - 1)
                 For k = 1 To nbProjets
                     If prefsInd(eNo, k) = projetNom Then
                         scoreTotal = scoreTotal + k: Exit For
@@ -237,8 +239,6 @@ Sub GenererDonneesDeTest()
 
         ' Attribution des rangs (rang 1 = score le plus bas = équipe la plus enthousiaste)
         ' Ex-aequo : le même rang est attribué (le rang suivant est donc sauté)
-        Dim rang As Long
-        Dim rangs() As Long
         ReDim rangs(1 To nbEquipes)
         For eq = 1 To nbEquipes
             rang = 1
@@ -280,13 +280,14 @@ Sub AffectationEquipesProjets()
     Application.ScreenUpdating = False
 
     Dim i As Long, j As Long
+    Dim nomEq As String, taille As Long, nomP As String
 
     ' ---- Lecture des tailles d'équipes ----
     Dim equipesTaille As Object: Set equipesTaille = CreateObject("Scripting.Dictionary")
     For i = 2 To wsEq.Cells(wsEq.Rows.Count, "A").End(xlUp).Row
-        Dim nomEq As String: nomEq = Trim(wsEq.Cells(i, 1).Value)
+        nomEq = Trim(wsEq.Cells(i, 1).Value)
         If nomEq <> "" Then
-            Dim taille As Long: taille = 0
+            taille = 0
             For j = 2 To wsEq.Cells(i, wsEq.Columns.Count).End(xlToLeft).Column
                 If Trim(wsEq.Cells(i, j).Value) <> "" Then taille = taille + 1
             Next j
