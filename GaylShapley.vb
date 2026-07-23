@@ -157,7 +157,8 @@ Sub GenererDonneesDeTest()
         Dim projUsed() As Boolean
         ReDim projUsed(1 To nbProjets)
 
-        Dim pos As Long, votesP() As Long, pIdx As Long, maxV As Long, winner As Long
+        Dim pos As Long, pIdx As Long, maxV As Long, winner As Long
+        Dim votesP() As Long
         For pos = 1 To nbProjets
             ReDim votesP(1 To nbProjets)
 
@@ -217,9 +218,10 @@ Sub GenererDonneesDeTest()
         wsP.Cells(i + 1, 5).Value = tailleMax    ' dans la fourchette globale de génération
 
         ' Calcul des scores : score(eq) = moyenne du rang du projet chez les membres de eq
-        Dim scores() As Double: ReDim scores(1 To nbEquipes)
         Dim projetNom As String: projetNom = "Projet " & Chr(64 + i)
         Dim scoreTotal As Double
+        Dim scores() As Double
+        ReDim scores(1 To nbEquipes)
         For eq = 1 To nbEquipes
             scoreTotal = 0
             For j = 1 To eqTaille(eq)
@@ -235,8 +237,9 @@ Sub GenererDonneesDeTest()
 
         ' Attribution des rangs (rang 1 = score le plus bas = équipe la plus enthousiaste)
         ' Ex-aequo : le même rang est attribué (le rang suivant est donc sauté)
-        Dim rangs() As Long: ReDim rangs(1 To nbEquipes)
         Dim rang As Long
+        Dim rangs() As Long
+        ReDim rangs(1 To nbEquipes)
         For eq = 1 To nbEquipes
             rang = 1
             For k = 1 To nbEquipes
