@@ -6,7 +6,7 @@ Implémentation en **VBA Excel** de l'algorithme de Gale-Shapley pour affecter d
 
 ## Contexte et problème résolu
 
-Dans un contexte pédagogique (école d'ingénieurs, university), des élèves se regroupent en équipes et doivent être affectés à des projets. Chaque équipe classe les projets par ordre de préférence, et chaque projet classe les équipes candidates. Les projets ont des contraintes de capacité (nombre minimum et maximum d'équipes acceptées, fourchette de taille d'équipe acceptable).
+Dans un contexte pédagogique (école d'ingénieurs, université), des élèves se regroupent en équipes et doivent être affectés à des projets. Chaque équipe classe les projets par ordre de préférence, et chaque projet classe les équipes candidates. Les projets ont des contraintes de capacité (nombre minimum et maximum d'équipes acceptées, fourchette de taille d'équipe acceptable).
 
 L'objectif est de produire une **affectation stable** : il n'existe aucune paire (équipe, projet) où l'équipe préférerait ce projet à son affectation actuelle ET le projet préférerait cette équipe à au moins une équipe déjà affectée.
 
@@ -69,24 +69,22 @@ Un score **faible** = équipe enthousiaste = bien classée par le projet. Les é
 
 ## Structure du classeur Excel
 
-### Feuilles à créer manuellement
+### Feuilles alimentées automatiquement
 
-| Feuille | Rôle | Alimentée par |
+| Feuille | Rôle | Créée/alimentée par |
 |---|---|---|
 | `Préférences_Élèves` | Listes de vœux ordonnés de chaque élève | `GenererDonneesDeTest` |
 | `Équipes` | Composition des équipes (membres) | `GenererDonneesDeTest` |
 | `Préférences_Équipes` | Préférences agrégées de chaque équipe (vote majoritaire) | `GenererDonneesDeTest` |
 | `Préférences_Projets` | Capacités + classement des équipes par chaque projet | `GenererDonneesDeTest` |
-| `Résultats` | Équipes affectées à chaque projet + statut | Macros d'affectation |
-| `Rapport_Satisfaction` | Rang du vœu obtenu par chaque équipe | `CreerRapportSatisfaction` |
+| `Résultats` | Équipes affectées à chaque projet + statut capacité | Macros 2 ou 3 |
 | `Log_Affectation` | Journal détaillé étape par étape | `AffectationEquipesPasAPas` |
+| `Rapport_Satisfaction` | Rang du vœu obtenu par chaque équipe + statistiques | `CreerRapportSatisfaction` |
 | `Bilan_Performance` | Métriques globales de l'affectation | `BilanPerformanceAlgorithme` |
+| `Details_Suivi` | Listes équipes sans projet, projets sous-minimum | `BilanPerformanceAlgorithme` |
+| `Affectations_par_Projet` | Vue détaillée projet → équipes → membres | `RemplirAffectationsParProjet` |
 
-### Feuilles créées automatiquement
-
-| Feuille | Créée par |
-|---|---|
-| `Details_Suivi` | `BilanPerformanceAlgorithme` |
+> Les feuilles manquantes sont **créées automatiquement** à la première exécution de chaque macro.
 
 ### Structure de `Préférences_Projets`
 
@@ -108,22 +106,28 @@ Un score **faible** = équipe enthousiaste = bien classée par le projet. Les é
 Génère l'ensemble des données de test en 4 étapes :
 1. Préférences individuelles aléatoires de chaque élève (mélange Fisher-Yates).
 2. Formation aléatoire des équipes (taille variable dans la fourchette saisie).
-3. Calcul des préférences des équipes par vote majoritaire.
+3. Calcul des préférences des équipes par **vote majoritaire** à partir des préférences individuelles.
 4. Calcul des classements des projets (basés sur la moyenne des rangs individuels).
 
 Paramètres saisis via `InputBox` : nombre d'élèves, nombre de projets (max 26), taille min et max des équipes.
 
-> Nécessite `System.Collections.ArrayList` (.NET Framework). Utilisez `TestArrayList` pour vérifier la disponibilité.
+> Les feuilles `Préférences_Élèves`, `Équipes`, `Préférences_Équipes`, `Préférences_Projets` sont **créées automatiquement** si elles n'existent pas.
 
 ### 2. `AffectationEquipesProjets`
 Exécute l'algorithme de Gale-Shapley complet en une passe, sans journalisation. Plus rapide que la version pas à pas.
 
+Écrit les résultats dans `Résultats` :
+- Équipes affectées à chaque projet
+- Statut capacité (OK / MINIMUM NON ATTEINT)
+
 ### 3. `AffectationEquipesPasAPas`
 Même algorithme avec journalisation détaillée de chaque étape dans `Log_Affectation` :
 - Action de l'équipe (proposition)
-- Décision du projet (acceptation, éviction, rejet)
+- Décision du projet (acceptation provisoire, éviction, rejet)
 - État courant du projet
 - Liste des équipes encore libres
+
+Produit les mêmes résultats que la macro 2 dans `Résultats`.
 
 ### 4. `CreerRapportSatisfaction`
 Pour chaque équipe affectée, calcule le **rang** du projet obtenu dans sa liste de vœux agrégée. Produit en pied de tableau :
@@ -146,8 +150,27 @@ Génère deux feuilles de synthèse :
 - Projets n'ayant pas atteint leur minimum
 - Projets sans aucune équipe
 
-### 6. `TestArrayList`
-Vérifie que `System.Collections.ArrayList` est disponible sur la machine. À exécuter en cas d'erreur dans `GenererDonneesDeTest`.
+### 6. `RemplirAffectationsParProjet`
+Génère la feuille `Affectations_par_Projet` : vue détaillée avec, pour chaque projet, la liste des équipes affectées et la composition (membres) de chaque équipe.
+
+Colonnes produites :
+
+| Colonne | Contenu |
+|---|---|
+| **Projet** | Nom du projet (cellules fusionnées si plusieurs équipes) |
+| **Statut Capacité** | OK ou MINIMUM NON ATTEINT |
+| **Équipe** | Nom de chaque équipe affectée |
+| **Membres** | Liste des élèves composant l'équipe |
+| **Taille** | Nombre de membres |
+| **Rang dans projet** | Classement de l'équipe selon le projet |
+
+Couleurs :
+- 🟢 Fond vert = projet avec minimum d'équipes atteint
+- 🟡 Fond jaune = minimum non atteint
+- 🔴 Fond rouge = aucune équipe affectée
+
+### 7. `TestArrayList` (diagnostic)
+Vérifie que `System.Collections.ArrayList` (.NET) est disponible sur la machine. Non utilisé par les macros principales, conservé à titre de diagnostic.
 
 ---
 
@@ -159,10 +182,14 @@ GenererDonneesDeTest
         ▼
 AffectationEquipesPasAPas   ←── (ou AffectationEquipesProjets pour plus de rapidité)
         │
-        ├──▶ CreerRapportSatisfaction
+        ├──▶ RemplirAffectationsParProjet   (vue détaillée projet → membres)
         │
-        └──▶ BilanPerformanceAlgorithme
+        ├──▶ CreerRapportSatisfaction       (satisfaction par équipe)
+        │
+        └──▶ BilanPerformanceAlgorithme     (métriques globales)
 ```
+
+> **Important :** Toujours exécuter `GenererDonneesDeTest` **avant** les macros d'affectation. Les macros 2 à 6 lisent les feuilles produites par la macro 1.
 
 ---
 
@@ -171,14 +198,13 @@ AffectationEquipesPasAPas   ←── (ou AffectationEquipesProjets pour plus de
 | # | Limite | Impact |
 |---|---|---|
 | 1 | **Maximum 26 projets** — les noms de projets sont "Projet A" à "Projet Z" | Limitation de la génération de test uniquement |
-| 2 | **`System.Collections.ArrayList`** nécessite `.NET Framework` | Erreur dans `GenererDonneesDeTest` sur certaines machines |
-| 3 | **Ex-aequo dans les classements** — deux équipes avec le même score reçoivent le même rang (le rang suivant est sauté) | Comportement équitable mais non déterministe en cas d'éviction |
-| 4 | **Vote majoritaire** — peut produire des cycles de Condorcet ; l'implémentation les résout en faveur de l'indice le plus bas | Cas rare, impact marginal |
+| 2 | **Ex-aequo dans les classements** — deux équipes avec le même score reçoivent le même rang (le rang suivant est sauté) | Comportement équitable mais non déterministe en cas d'éviction |
+| 3 | **Vote majoritaire** — peut produire des cycles de Condorcet ; l'implémentation les résout en faveur de l'indice le plus bas | Cas rare, impact marginal |
+| 4 | **Équipes sans vœux compatibles** — si tous les projets sont incompatibles avec la taille d'une équipe, elle reste non affectée | Signalé dans `Details_Suivi` |
 
 ---
 
 ## Prérequis
 
 - Microsoft Excel (Windows) avec macros activées, sauvegardé en `.xlsm`
-- `.NET Framework` installé (pour `System.Collections.ArrayList` dans la génération de test)
-- Feuilles listées dans "Structure du classeur" créées avant la première exécution
+- Aucune dépendance externe : les macros utilisent uniquement `Scripting.Dictionary` (WScript natif Windows) et `Collection` (VBA natif)
