@@ -949,16 +949,20 @@ Private Sub LogStep(ByVal ws As Worksheet, ByRef ligne As Long, ByVal action As 
 End Sub
 
 Private Function GetCelibatairesString(ByVal coll As Collection) As String
-    If coll.Count = 0 Then GetCelibatairesString = "Aucune": Exit Function
-    Dim arr() As String: ReDim arr(1 To coll.Count)
+    Dim arr() As String
     Dim i As Long
+    
+    If coll.Count = 0 Then GetCelibatairesString = "Aucune": Exit Function
+    ReDim arr(1 To coll.Count)
     For i = 1 To coll.Count: arr(i) = coll(i): Next i
     GetCelibatairesString = Join(arr, ", ")
 End Function
 
 Private Function CollectionToArray(coll As Collection) As Variant
-    Dim arr() As Variant: ReDim arr(1 To coll.Count)
+    Dim arr() As Variant
     Dim i As Long
+    
+    ReDim arr(1 To coll.Count)
     For i = 1 To coll.Count: arr(i) = coll(i): Next i
     CollectionToArray = arr
 End Function
