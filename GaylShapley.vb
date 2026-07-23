@@ -198,6 +198,11 @@ Sub GenererDonneesDeTest()
     ' accordent à ce projet dans leur liste individuelle (score bas = équipe enthousiaste).
     ' ======================================================================
     Dim wsP As Worksheet: Set wsP = ThisWorkbook.Sheets("Préférences_Projets")
+    Dim minEq As Long, maxEq As Long
+    Dim projetNom As String, scoreTotal As Double
+    Dim scores() As Double, eNo As Long
+    Dim rang As Long, rangs() As Long
+
     wsP.Cells.Clear
     wsP.Cells(1, 1).Value = "Projet"
     wsP.Cells(1, 2).Value = "MinEquipes"
@@ -206,11 +211,6 @@ Sub GenererDonneesDeTest()
     wsP.Cells(1, 5).Value = "TailleMaxEquipe"
     For eq = 1 To nbEquipes: wsP.Cells(1, 5 + eq).Value = "Équipe " & eq: Next eq
     wsP.Rows(1).Font.Bold = True
-
-    Dim minEq As Long, maxEq As Long
-    Dim projetNom As String, scoreTotal As Double
-    Dim scores() As Double, eNo As Long
-    Dim rang As Long, rangs() As Long
     
     For i = 1 To nbProjets
         wsP.Cells(i + 1, 1).Value = "Projet " & Chr(64 + i)
