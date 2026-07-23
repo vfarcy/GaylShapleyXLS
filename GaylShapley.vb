@@ -17,7 +17,7 @@ Sub GenererDonneesDeTest()
     Dim elevesShuf() As Long
     Dim eqDebut() As Long, eqTaille() As Long
     Dim nbEquipes As Long, cursor As Long, restants As Long, taille As Long, maxT As Long
-    Dim eq As Long, nbM As Long, debut As Long, eNum As Long
+    Dim eq As Long, nbM As Long, debut As Long, eleveNum As Long
     Dim prefsMembres() As String, projUsed() As Boolean
     Dim pos As Long, pIdx As Long, maxV As Long, winner As Long, votesP() As Long
     Dim minEq As Long, maxEq As Long
@@ -152,9 +152,9 @@ Sub GenererDonneesDeTest()
         ' Préférences de chaque membre : prefsMembres(m, j) = nom du j-ième choix du membre m
         ReDim prefsMembres(1 To nbM, 1 To nbProjets)
         For i = 1 To nbM
-            eNum = elevesShuf(debut + i - 1)
+            eleveNum = elevesShuf(debut + i - 1)
             For j = 1 To nbProjets
-                prefsMembres(i, j) = prefsInd(eNum, j)
+                prefsMembres(i, j) = prefsInd(eleveNum, j)
             Next j
         Next i
 
