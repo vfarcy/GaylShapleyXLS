@@ -945,6 +945,150 @@ End Sub
 
 
 '================================================================================================
+' MACRO 6 : AFFECTATIONS PAR PROJET (vue détaillée avec membres des équipes)
+' Feuilles lues  : Résultats, Équipes, Préférences_Projets
+' Feuille écrite : Affectations_par_Projet
+'================================================================================================
+Sub RemplirAffectationsParProjet()
+
+    Dim wsR As Worksheet, wsEq As Worksheet, wsP As Worksheet, wsAff As Worksheet
+    Dim i As Long, j As Long
+    Dim nomProjet As String, listeStr As String, arr As Variant, nomEq As Variant
+    Dim minEq As Long, maxEq As Long, nbAff As Long
+    Dim ligne As Long
+    Dim capacites As Object, rangsProjet As Object, membres As Object
+    Dim rd As Object, lastColP As Long, nomEqStr As String
+    Dim memArr() As String, nbMem As Long, tailleEq As Long
+    Dim nomEqClean As String, premiereLigne As Long, statut As String
+    Dim eqH As String
+
+    On Error Resume Next
+    Set wsR   = ThisWorkbook.Sheets("Résultats")
+    Set wsEq  = ThisWorkbook.Sheets("Équipes")
+    Set wsP   = ThisWorkbook.Sheets("Préférences_Projets")
+    Set wsAff = ThisWorkbook.Sheets("Affectations_par_Projet")
+    If wsAff Is Nothing Then
+        Set wsAff = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
+        wsAff.Name = "Affectations_par_Projet"
+    End If
+    On Error GoTo 0
+
+    If wsR Is Nothing Or wsEq Is Nothing Or wsP Is Nothing Then
+        MsgBox "Erreur : feuilles Résultats, Équipes ou Préférences_Projets manquantes.", vbCritical
+        Exit Sub
+    End If
+
+    Application.ScreenUpdating = False
+    wsAff.Cells.Clear
+
+    ' ---- En-tête ----
+    wsAff.Range("A1:F1").Value = Array("Projet", "Statut Capacité", "Équipe", "Membres", "Taille", "Rang dans projet")
+    wsAff.Range("A1:F1").Font.Bold = True
+    wsAff.Range("A1:F1").Interior.Color = RGB(68, 114, 196)
+    wsAff.Range("A1:F1").Font.Color = vbWhite
+    ligne = 2
+
+    ' ---- Lecture capacités et rangs projets ----
+    Set capacites = CreateObject("Scripting.Dictionary")
+    Set rangsProjet = CreateObject("Scripting.Dictionary")
+    lastColP = wsP.Cells(1, wsP.Columns.Count).End(xlToLeft).Column
+    For i = 2 To wsP.Cells(wsP.Rows.Count, "A").End(xlUp).Row
+        nomProjet = Trim(wsP.Cells(i, 1).Value)
+        If nomProjet <> "" Then
+            capacites(nomProjet) = Array(CLng(wsP.Cells(i, 2).Value), CLng(wsP.Cells(i, 3).Value))
+            Set rd = CreateObject("Scripting.Dictionary")
+            For j = 6 To lastColP
+                eqH = Trim(wsP.Cells(1, j).Value)
+                If eqH <> "" Then rd(eqH) = CLng(wsP.Cells(i, j).Value)
+            Next j
+            Set rangsProjet(nomProjet) = rd
+        End If
+    Next i
+
+    ' ---- Lecture composition équipes ----
+    Set membres = CreateObject("Scripting.Dictionary")
+    For i = 2 To wsEq.Cells(wsEq.Rows.Count, "A").End(xlUp).Row
+        nomEqStr = Trim(wsEq.Cells(i, 1).Value)
+        If nomEqStr <> "" Then
+            nbMem = 0
+            ReDim memArr(0)
+            For j = 2 To wsEq.Cells(i, wsEq.Columns.Count).End(xlToLeft).Column
+                If Trim(wsEq.Cells(i, j).Value) <> "" Then
+                    nbMem = nbMem + 1
+                    ReDim Preserve memArr(1 To nbMem)
+                    memArr(nbMem) = Trim(wsEq.Cells(i, j).Value)
+                End If
+            Next j
+            membres(nomEqStr) = IIf(nbMem > 0, Join(memArr, ", "), "(aucun)")
+        End If
+    Next i
+
+    ' ---- Construction tableau par projet ----
+    For i = 2 To wsR.Cells(wsR.Rows.Count, "A").End(xlUp).Row
+        nomProjet = Trim(wsR.Cells(i, 1).Value)
+        listeStr  = Trim(wsR.Cells(i, 2).Value)
+        If nomProjet = "" Then GoTo SuiteLigne
+
+        statut = Trim(wsR.Cells(i, 3).Value)
+
+        If listeStr = "Aucune" Or listeStr = "" Then
+            wsAff.Cells(ligne, 1).Value = nomProjet
+            wsAff.Cells(ligne, 2).Value = statut
+            wsAff.Cells(ligne, 3).Value = "(aucune équipe affectée)"
+            wsAff.Range("A" & ligne & ":F" & ligne).Interior.Color = RGB(255, 235, 235)
+            ligne = ligne + 1
+        Else
+            arr = Split(listeStr, ", ")
+            nbAff = UBound(arr) - LBound(arr) + 1
+            premiereLigne = ligne
+
+            For Each nomEq In arr
+                nomEqClean = Trim(CStr(nomEq))
+                wsAff.Cells(ligne, 1).Value = IIf(ligne = premiereLigne, nomProjet, "")
+                wsAff.Cells(ligne, 2).Value = IIf(ligne = premiereLigne, statut, "")
+                wsAff.Cells(ligne, 3).Value = nomEqClean
+                wsAff.Cells(ligne, 4).Value = IIf(membres.Exists(nomEqClean), membres(nomEqClean), "?")
+                tailleEq = 0
+                If membres.Exists(nomEqClean) Then
+                    tailleEq = UBound(Split(membres(nomEqClean), ", ")) + 1
+                End If
+                wsAff.Cells(ligne, 5).Value = tailleEq
+                If rangsProjet.Exists(nomProjet) Then
+                    If rangsProjet(nomProjet).Exists(nomEqClean) Then
+                        wsAff.Cells(ligne, 6).Value = rangsProjet(nomProjet)(nomEqClean)
+                    End If
+                End If
+                If InStr(statut, "MINIMUM NON ATTEINT") > 0 Then
+                    wsAff.Cells(ligne, 1).Interior.Color = RGB(255, 235, 156)
+                Else
+                    wsAff.Cells(ligne, 1).Interior.Color = RGB(235, 255, 235)
+                End If
+                ligne = ligne + 1
+            Next nomEq
+
+            If nbAff > 1 Then
+                wsAff.Range("A" & premiereLigne & ":A" & ligne - 1).Merge
+                wsAff.Range("B" & premiereLigne & ":B" & ligne - 1).Merge
+                wsAff.Range("A" & premiereLigne & ":B" & ligne - 1).VerticalAlignment = xlVAlignCenter
+            End If
+        End If
+
+        wsAff.Range("A" & ligne & ":F" & ligne).Borders(xlEdgeTop).Weight = xlThin
+
+SuiteLigne:
+    Next i
+
+    wsAff.Columns("A:F").AutoFit
+    wsAff.Columns("D").ColumnWidth = 50
+    wsAff.Range("A1:F" & ligne - 1).Borders.Weight = xlThin
+
+    Application.ScreenUpdating = True
+    MsgBox "Feuille 'Affectations_par_Projet' générée (" & ligne - 2 & " lignes).", vbInformation
+
+End Sub
+
+
+'================================================================================================
 ' MACRO DIAGNOSTIC : Vérifier la disponibilité de System.Collections.ArrayList
 '================================================================================================
 Sub TestArrayList()
