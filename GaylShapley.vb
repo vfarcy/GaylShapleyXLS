@@ -800,6 +800,11 @@ Sub BilanPerformanceAlgorithme()
     Dim equipesSansProjet As New Collection
     Dim rang As Long, prefs As Collection, nbAff As Long
     Dim somme As Double, sc As Double, ri As Variant
+    Dim projetsSousMinimum As New Collection
+    Dim projetsVides As New Collection
+    Dim nbProjetsMinAtteint As Long: nbProjetsMinAtteint = 0
+    Dim rangMoyen As Double, ecartType As Double
+    Dim ligne As Long, ld As Long
 
     For Each eq In prefsEquipes.Keys
         If affectationsEquipe.Exists(eq) Then
@@ -821,10 +826,6 @@ Sub BilanPerformanceAlgorithme()
         End If
     Next eq
 
-    Dim projetsSousMinimum As New Collection
-    Dim projetsVides As New Collection
-    Dim nbProjetsMinAtteint As Long: nbProjetsMinAtteint = 0
-
     For Each projet In projetsCapacites.Keys
         nbAff = IIf(affectationsProjet.Exists(projet), affectationsProjet(projet).Count, 0)
         If nbAff = 0 Then projetsVides.Add projet
@@ -835,7 +836,6 @@ Sub BilanPerformanceAlgorithme()
         End If
     Next projet
 
-    Dim rangMoyen As Double, ecartType As Double
     If rangsObtenus.Count > 0 Then
         somme = 0
         For Each ri In rangsObtenus: somme = somme + ri: Next ri
@@ -849,7 +849,7 @@ Sub BilanPerformanceAlgorithme()
 
     ' ---- Écriture du bilan ----
     wsBilan.Columns("A").ColumnWidth = 45: wsBilan.Columns("B").ColumnWidth = 15
-    Dim ligne As Long: ligne = 1
+    ligne = 1
 
     wsBilan.Cells(ligne, "A").Value = "BILAN DU POINT DE VUE DES ÉQUIPES"
     wsBilan.Range("A" & ligne & ":B" & ligne).Merge
@@ -888,7 +888,7 @@ Sub BilanPerformanceAlgorithme()
 
     ' ---- Listes de suivi ----
     wsDetails.Columns("A").ColumnWidth = 35: wsDetails.Columns("B").ColumnWidth = 35
-    Dim ld As Long: ld = 1
+    ld = 1
     wsDetails.Cells(ld, "A").Value = "LISTES DE SUIVI": wsDetails.Cells(ld, "A").Font.Bold = True: ld = ld + 2
 
     wsDetails.Cells(ld, "A").Value = "Équipes sans projet :": wsDetails.Cells(ld, "A").Font.Bold = True
