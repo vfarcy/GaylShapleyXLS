@@ -146,8 +146,9 @@ Sub GenererDonneesDeTest()
         ' Préférences de chaque membre : prefsMembres(m, j) = nom du j-ième choix du membre m
         Dim prefsMembres() As String
         ReDim prefsMembres(1 To nbM, 1 To nbProjets)
+        Dim eNum As Long
         For i = 1 To nbM
-            Dim eNum As Long: eNum = elevesShuf(debut + i - 1)
+            eNum = elevesShuf(debut + i - 1)
             For j = 1 To nbProjets: prefsMembres(i, j) = prefsInd(eNum, j): Next j
         Next i
 
