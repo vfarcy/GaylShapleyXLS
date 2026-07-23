@@ -149,7 +149,9 @@ Sub GenererDonneesDeTest()
         Dim eNum As Long
         For i = 1 To nbM
             eNum = elevesShuf(debut + i - 1)
-            For j = 1 To nbProjets: prefsMembres(i, j) = prefsInd(eNum, j): Next j
+            For j = 1 To nbProjets
+                prefsMembres(i, j) = prefsInd(eNum, j)
+            Next j
         Next i
 
         ' Vote majoritaire position par position
