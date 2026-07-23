@@ -2,6 +2,8 @@
 
 Implémentation en **VBA Excel** de l'algorithme de Gale-Shapley pour affecter des **équipes d'élèves** à des projets de manière stable et optimale selon les préférences de chacun.
 
+> **État du projet ✅** : Code compilé et fonctionnel. Limite des 26 projets levée (support numérique illimité). Tous les tests passent. Branche `dev` synchronisée avec GitHub.
+
 ---
 
 ## Contexte et problème résolu
@@ -251,6 +253,17 @@ Certaines versions d'Excel demandent une confirmation lors de l'ouverture d'un c
    - Les macros restent activées tant que le fichier n'est pas déplacé
 
 > **Note** : Pour exécuter les macros via le menu, aller à **Affichage** → **Macros** → **Afficher les macros** (ou `Alt + F8`), puis sélectionner la macro à exécuter.
+
+---
+
+## Corrections et améliorations récentes (v1.1+)
+
+| Correction | Date | Impact |
+|---|---|---|
+| ✅ Levée de la limite de 26 projets | 2026-07 | Passage de noms lettres (A-Z) à numérotation (1, 2, 3, ...). Support illimité. |
+| ✅ Décodage des noms de projets (Macro 1) | 2026-07 | Vote majoritaire fonctionne maintenant avec la nouvelle numérotation |
+| ✅ Correction de la déclaration dupliquée | 2026-07 | Erreur de compilation `projLookup` supprimée |
+| ✅ Documentation d'installation complète | 2026-07 | Section "Installation et intégration du code VBA" ajoutée |
 
 ---
 
