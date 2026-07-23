@@ -18,6 +18,7 @@ Sub GenererDonneesDeTest()
     Dim eqDebut() As Long, eqTaille() As Long
     Dim nbEquipes As Long, cursor As Long, restants As Long, taille As Long, maxT As Long
     Dim eq As Long, nbM As Long, debut As Long, eleveNum As Long
+    Dim wsTemp As Worksheet, sheetName As Variant
     Dim prefsMembres() As String, projUsed() As Boolean
     Dim pos As Long, pIdx As Long, maxV As Long, winner As Long, votesP() As Long
     Dim minEq As Long, maxEq As Long
@@ -44,6 +45,18 @@ Sub GenererDonneesDeTest()
         MsgBox "Erreur : la taille minimale d'équipe dépasse le nombre d'élèves.", vbCritical
         Exit Sub
     End If
+
+    ' Créer les feuilles nécessaires si elles n'existent pas
+    For Each sheetName In Array("Préférences_Élèves", "Équipes", "Préférences_Équipes", "Préférences_Projets")
+        On Error Resume Next
+        Set wsTemp = Nothing
+        Set wsTemp = ThisWorkbook.Sheets(CStr(sheetName))
+        On Error GoTo 0
+        If wsTemp Is Nothing Then
+            Set wsTemp = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
+            wsTemp.Name = CStr(sheetName)
+        End If
+    Next sheetName
 
     Application.ScreenUpdating = False
     Randomize
@@ -641,6 +654,7 @@ Sub CreerRapportSatisfaction()
     Dim equipe As Variant
     Dim projetObtenu As String, rang As Long, prefs As Collection
     Dim somme As Double, ri As Variant, moyenne As Double, sc As Double, ecartType As Double
+    Set rangsObtenus = New Collection
 
     On Error Resume Next
     Set wsR       = ThisWorkbook.Sheets("Résultats")
