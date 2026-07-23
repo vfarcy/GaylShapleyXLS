@@ -109,7 +109,7 @@ Génère l'ensemble des données de test en 4 étapes :
 3. Calcul des préférences des équipes par **vote majoritaire** à partir des préférences individuelles.
 4. Calcul des classements des projets (basés sur la moyenne des rangs individuels).
 
-Paramètres saisis via `InputBox` : nombre d'élèves, nombre de projets (max 26), taille min et max des équipes.
+Paramètres saisis via `InputBox` : nombre d'élèves, nombre de projets, taille min et max des équipes.
 
 > Les feuilles `Préférences_Élèves`, `Équipes`, `Préférences_Équipes`, `Préférences_Projets` sont **créées automatiquement** si elles n'existent pas.
 
@@ -197,10 +197,9 @@ AffectationEquipesPasAPas   ←── (ou AffectationEquipesProjets pour plus de
 
 | # | Limite | Impact |
 |---|---|---|
-| 1 | **Maximum 26 projets** — les noms de projets sont "Projet A" à "Projet Z" | Limitation de la génération de test uniquement |
-| 2 | **Ex-aequo dans les classements** — deux équipes avec le même score reçoivent le même rang (le rang suivant est sauté) | Comportement équitable mais non déterministe en cas d'éviction |
-| 3 | **Vote majoritaire** — peut produire des cycles de Condorcet ; l'implémentation les résout en faveur de l'indice le plus bas | Cas rare, impact marginal |
-| 4 | **Équipes sans vœux compatibles** — si tous les projets sont incompatibles avec la taille d'une équipe, elle reste non affectée | Signalé dans `Details_Suivi` |
+| 1 | **Ex-aequo dans les classements** — deux équipes avec le même score reçoivent le même rang (le rang suivant est sauté) | Comportement équitable mais non déterministe en cas d'éviction |
+| 2 | **Vote majoritaire** — peut produire des cycles de Condorcet ; l'implémentation les résout en faveur de l'indice le plus bas | Cas rare, impact marginal |
+| 3 | **Équipes sans vœux compatibles** — si tous les projets sont incompatibles avec la taille d'une équipe, elle reste non affectée | Signalé dans `Details_Suivi` |
 
 ---
 

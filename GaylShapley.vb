@@ -31,8 +31,8 @@ Sub GenererDonneesDeTest()
     nbEleves = CLng(InputBox("Nombre d'élèves ?", "Génération des données"))
     If Err.Number <> 0 Or nbEleves <= 1 Then MsgBox "Annulé.", vbInformation: Exit Sub
     Err.Clear
-    nbProjets = CLng(InputBox("Nombre de projets (max 26) ?", "Génération des données"))
-    If Err.Number <> 0 Or nbProjets <= 0 Or nbProjets > 26 Then MsgBox "Annulé.", vbInformation: Exit Sub
+    nbProjets = CLng(InputBox("Nombre de projets ?", "Génération des données"))
+    If Err.Number <> 0 Or nbProjets <= 0 Then MsgBox "Annulé.", vbInformation: Exit Sub
     Err.Clear
     tailleMin = CLng(InputBox("Taille minimale des équipes ?", "Génération des données", "2"))
     If Err.Number <> 0 Or tailleMin <= 0 Then MsgBox "Annulé.", vbInformation: Exit Sub
@@ -76,7 +76,7 @@ Sub GenererDonneesDeTest()
     ReDim prefsInd(1 To nbEleves, 1 To nbProjets)
 
     ReDim projs(1 To nbProjets)
-    For i = 1 To nbProjets: projs(i) = "Projet " & Chr(64 + i): Next i
+    For i = 1 To nbProjets: projs(i) = "Projet " & i: Next i
 
     For i = 1 To nbEleves
         wsE.Cells(i + 1, 1).Value = "Élève " & i
@@ -198,7 +198,7 @@ Sub GenererDonneesDeTest()
                 End If
             Next j
 
-            wsPE.Cells(eq + 1, 1 + pos).Value = "Projet " & Chr(64 + winner)
+            wsPE.Cells(eq + 1, 1 + pos).Value = "Projet " & winner
             projUsed(winner) = True
         Next pos
     Next eq
@@ -224,7 +224,7 @@ Sub GenererDonneesDeTest()
     wsP.Rows(1).Font.Bold = True
     
     For i = 1 To nbProjets
-        wsP.Cells(i + 1, 1).Value = "Projet " & Chr(64 + i)
+        wsP.Cells(i + 1, 1).Value = "Projet " & i
         minEq = Application.WorksheetFunction.RandBetween(1, 2)
         maxEq = Application.WorksheetFunction.RandBetween(minEq, minEq + 2)
         wsP.Cells(i + 1, 2).Value = minEq
@@ -233,7 +233,7 @@ Sub GenererDonneesDeTest()
         wsP.Cells(i + 1, 5).Value = tailleMax    ' dans la fourchette globale de génération
 
         ' Calcul des scores : score(eq) = moyenne du rang du projet chez les membres de eq
-        projetNom = "Projet " & Chr(64 + i)
+        projetNom = "Projet " & i
         ReDim scores(1 To nbEquipes)
         For eq = 1 To nbEquipes
             scoreTotal = 0
