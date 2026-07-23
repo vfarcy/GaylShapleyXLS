@@ -11,7 +11,7 @@ Option Explicit
 Sub GenererDonneesDeTest()
     ' === DÉCLARATIONS COMPLÈTES AU DÉBUT ===
     Dim nbEleves As Long, nbProjets As Long, tailleMin As Long, tailleMax As Long
-    Dim i As Long, j As Long, k As Long, r As Long, tmpL As Long, projLookup As Long, projLookup As Long
+    Dim i As Long, j As Long, k As Long, r As Long, tmpL As Long, projLookup As Long
     Dim wsE As Worksheet, wsEq As Worksheet, wsPE As Worksheet, wsP As Worksheet
     Dim prefsInd() As String, projs() As String, tmpS As String
     Dim elevesShuf() As Long
