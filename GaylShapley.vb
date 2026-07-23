@@ -304,15 +304,14 @@ Sub AffectationEquipesProjets()
     Next i
 
     ' ---- Lecture des données projets ----
-    Dim projetsMinEq As Object:     Set projetsMinEq     = CreateObject("Scripting.Dictionary")
-    Dim projetsMaxEq As Object:     Set projetsMaxEq     = CreateObject("Scripting.Dictionary")
-    Dim projetsTailleMin As Object: Set projetsTailleMin  = CreateObject("Scripting.Dictionary")
-    Dim projetsTailleMax As Object: Set projetsTailleMax  = CreateObject("Scripting.Dictionary")
-    Dim projetsRangs As Object:     Set projetsRangs     = CreateObject("Scripting.Dictionary")
-    Dim affectationsProjet As Object: Set affectationsProjet = CreateObject("Scripting.Dictionary")
+    Set projetsMinEq = CreateObject("Scripting.Dictionary")
+    Set projetsMaxEq = CreateObject("Scripting.Dictionary")
+    Set projetsTailleMin = CreateObject("Scripting.Dictionary")
+    Set projetsTailleMax = CreateObject("Scripting.Dictionary")
+    Set projetsRangs = CreateObject("Scripting.Dictionary")
+    Set affectationsProjet = CreateObject("Scripting.Dictionary")
 
-    Dim lastCol As Long: lastCol = wsP.Cells(1, wsP.Columns.Count).End(xlToLeft).Column
-    Dim rangsDict As Object, eqH As String
+    lastCol = wsP.Cells(1, wsP.Columns.Count).End(xlToLeft).Column
     For i = 2 To wsP.Cells(wsP.Rows.Count, "A").End(xlUp).Row
         nomP = Trim(wsP.Cells(i, 1).Value)
         If nomP <> "" Then
@@ -358,10 +357,6 @@ Sub AffectationEquipesProjets()
     Next i
 
     ' ---- Algorithme de Gale-Shapley sur les équipes ----
-    Dim equipeActuelle As String, indexProp As Long, projetVise As String
-    Dim affectesAuProjet As Object, maxEqP As Long, pireEquipe As String
-    Dim rangPire As Long, eAff As Variant, rangNouvelle As Long
-
     While celibataires.Count > 0
         equipeActuelle = celibataires(1)
         indexProp = propositionsFaites(equipeActuelle) + 1
@@ -443,9 +438,26 @@ End Sub
 ' MACRO 3 : AFFECTATION PAS À PAS (avec journal dans Log_Affectation)
 '================================================================================================
 Sub AffectationEquipesPasAPas()
-
+    ' === DÉCLARATIONS COMPLÈTES AU DÉBUT ===
     Dim wsEq As Worksheet, wsPE As Worksheet, wsP As Worksheet, wsR As Worksheet, wsLog As Worksheet
+    Dim ligneLog As Long
+    Dim i As Long, j As Long
+    Dim nomEq As String, taille As Long, nomP As String
+    Dim tEq As Long, pNom As String
+    Dim equipesTaille As Object
+    Dim projetsMinEq As Object, projetsMaxEq As Object, projetsTailleMin As Object, projetsTailleMax As Object
+    Dim projetsRangs As Object, affectationsProjet As Object
+    Dim lastCol As Long, rangsDict As Object, eqH As String
+    Dim equipePrefs As Object, celibataires As Collection
+    Dim propositionsFaites As Object, affectationEquipe As Object
+    Dim prefsFiltrees As Collection
+    Dim equipeActuelle As String, indexProp As Long, projetVise As String
+    Dim action As String, decision As String, statut As String
+    Dim affectesAuProjet As Object, maxEqP As Long, pireEquipe As String
+    Dim rangPire As Long, eAff As Variant, rangNouvelle As Long
+    Dim ligneR As Long, projet As Variant, listeEq As String, nbAff As Long
 
+    ' === DÉBUT DU CODE EXÉCUTABLE ===
     On Error Resume Next
     Set wsEq  = ThisWorkbook.Sheets("Équipes")
     Set wsPE  = ThisWorkbook.Sheets("Préférences_Équipes")
@@ -462,14 +474,10 @@ Sub AffectationEquipesPasAPas()
     wsLog.Cells.Clear
     wsLog.Range("A1:E1").Value = Array("Étape", "Action de l'Équipe", "Décision du Projet", "Statut du Projet", "Équipes libres")
     wsLog.Range("A1:E1").Font.Bold = True
-    Dim ligneLog As Long: ligneLog = 1
-
-    Dim i As Long, j As Long
-    Dim nomEq As String, taille As Long, nomP As String
-    Dim tEq As Long, pNom As String
+    ligneLog = 1
 
     ' ---- Lecture des tailles d'équipes ----
-    Dim equipesTaille As Object: Set equipesTaille = CreateObject("Scripting.Dictionary")
+    Set equipesTaille = CreateObject("Scripting.Dictionary")
     For i = 2 To wsEq.Cells(wsEq.Rows.Count, "A").End(xlUp).Row
         nomEq = Trim(wsEq.Cells(i, 1).Value)
         If nomEq <> "" Then
@@ -482,15 +490,14 @@ Sub AffectationEquipesPasAPas()
     Next i
 
     ' ---- Lecture des données projets ----
-    Dim projetsMinEq As Object:     Set projetsMinEq     = CreateObject("Scripting.Dictionary")
-    Dim projetsMaxEq As Object:     Set projetsMaxEq     = CreateObject("Scripting.Dictionary")
-    Dim projetsTailleMin As Object: Set projetsTailleMin  = CreateObject("Scripting.Dictionary")
-    Dim projetsTailleMax As Object: Set projetsTailleMax  = CreateObject("Scripting.Dictionary")
-    Dim projetsRangs As Object:     Set projetsRangs     = CreateObject("Scripting.Dictionary")
-    Dim affectationsProjet As Object: Set affectationsProjet = CreateObject("Scripting.Dictionary")
+    Set projetsMinEq = CreateObject("Scripting.Dictionary")
+    Set projetsMaxEq = CreateObject("Scripting.Dictionary")
+    Set projetsTailleMin = CreateObject("Scripting.Dictionary")
+    Set projetsTailleMax = CreateObject("Scripting.Dictionary")
+    Set projetsRangs = CreateObject("Scripting.Dictionary")
+    Set affectationsProjet = CreateObject("Scripting.Dictionary")
 
-    Dim lastCol As Long: lastCol = wsP.Cells(1, wsP.Columns.Count).End(xlToLeft).Column
-    Dim rangsDict As Object, eqH As String
+    lastCol = wsP.Cells(1, wsP.Columns.Count).End(xlToLeft).Column
     For i = 2 To wsP.Cells(wsP.Rows.Count, "A").End(xlUp).Row
         nomP = Trim(wsP.Cells(i, 1).Value)
         If nomP <> "" Then
@@ -509,11 +516,10 @@ Sub AffectationEquipesPasAPas()
     Next i
 
     ' ---- Lecture des préférences + pré-filtrage des incompatibilités de taille ----
-    Dim equipePrefs As Object:        Set equipePrefs       = CreateObject("Scripting.Dictionary")
-    Dim celibataires As New Collection
-    Dim propositionsFaites As Object: Set propositionsFaites = CreateObject("Scripting.Dictionary")
-    Dim affectationEquipe As Object:  Set affectationEquipe  = CreateObject("Scripting.Dictionary")
-    Dim prefsFiltrees As Collection
+    Set equipePrefs = CreateObject("Scripting.Dictionary")
+    Set celibataires = New Collection
+    Set propositionsFaites = CreateObject("Scripting.Dictionary")
+    Set affectationEquipe = CreateObject("Scripting.Dictionary")
 
     For i = 2 To wsPE.Cells(wsPE.Rows.Count, "A").End(xlUp).Row
         nomEq = Trim(wsPE.Cells(i, 1).Value)
@@ -536,11 +542,6 @@ Sub AffectationEquipesPasAPas()
     Next i
 
     ' ---- Algorithme de Gale-Shapley avec journalisation ----
-    Dim equipeActuelle As String, indexProp As Long, projetVise As String
-    Dim action As String, decision As String, statut As String
-    Dim affectesAuProjet As Object, maxEqP As Long, pireEquipe As String
-    Dim rangPire As Long, eAff As Variant, rangNouvelle As Long
-
     While celibataires.Count > 0
         equipeActuelle = celibataires(1)
         indexProp = propositionsFaites(equipeActuelle) + 1
@@ -599,9 +600,7 @@ Sub AffectationEquipesPasAPas()
     wsR.Cells.ClearContents
     wsR.Range("A1:C1").Value = Array("Projet", "Équipes Affectées", "Statut Capacité")
     wsR.Range("A1:C1").Font.Bold = True
-    Dim ligneR As Long: ligneR = 2
-    Dim projet As Variant, listeEq As String
-    Dim nbAff As Long
+    ligneR = 2
     For Each projet In affectationsProjet.Keys
         wsR.Cells(ligneR, 1).Value = projet
         listeEq = IIf(affectationsProjet(projet).Count > 0, Join(affectationsProjet(projet).Keys, ", "), "Aucune")
