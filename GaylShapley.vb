@@ -11,7 +11,7 @@ Option Explicit
 Sub GenererDonneesDeTest()
     ' === DÉCLARATIONS COMPLÈTES AU DÉBUT ===
     Dim nbEleves As Long, nbProjets As Long, tailleMin As Long, tailleMax As Long
-    Dim i As Long, j As Long, k As Long, r As Long, tmpL As Long
+    Dim i As Long, j As Long, k As Long, r As Long, tmpL As Long, projLookup As Long, projLookup As Long
     Dim wsE As Worksheet, wsEq As Worksheet, wsPE As Worksheet, wsP As Worksheet
     Dim prefsInd() As String, projs() As String, tmpS As String
     Dim elevesShuf() As Long
@@ -180,10 +180,16 @@ Sub GenererDonneesDeTest()
             For i = 1 To nbM
                 ' Premier choix restant de ce membre
                 For j = 1 To nbProjets
-                    ' Index du projet : "Projet A"=1, "Projet B"=2, etc.
-                    pIdx = Asc(Mid(prefsMembres(i, j), 8, 1)) - 64
-                    If Not projUsed(pIdx) Then
-                        votesP(pIdx) = votesP(pIdx) + 1
+                    ' Chercher l'index du projet dans projs() par son nom
+                    projLookup = 0
+                    For k = 1 To nbProjets
+                        If projs(k) = prefsMembres(i, j) Then
+                            projLookup = k
+                            Exit For
+                        End If
+                    Next k
+                    If projLookup > 0 And Not projUsed(projLookup) Then
+                        votesP(projLookup) = votesP(projLookup) + 1
                         Exit For
                     End If
                 Next j
