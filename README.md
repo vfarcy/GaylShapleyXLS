@@ -51,6 +51,10 @@ L'algorithme se termine nécessairement car à chaque proposition, une équipe a
 
 À la fin, l'affectation est **stable** : si une équipe E préfère un projet P à son projet actuel, alors P a déjà rencontré E et l'a rejetée au profit d'équipes qu'il classe mieux. P ne voudra donc jamais prendre E au détriment de ses affectés.
 
+Cette stabilité est celle de Gale-Shapley : elle garantit l'absence de paire bloquante entre une équipe et un projet, mais elle ne garantit pas à elle seule que chaque projet atteigne son nombre minimum d'équipes.
+
+Dans l'état actuel du projet, ce point n'est pas pénalisant : le choix métier est de favoriser les demandes des étudiants, donc les préférences des équipes priment sur le remplissage minimal des projets. Les minima restent affichés et suivis, mais ils ne bloquent pas encore l'affectation.
+
 ### Agrégation des préférences (score de Borda)
 
 Les préférences d'une équipe sont calculées à partir des préférences individuelles de ses membres via un **score de Borda** :
@@ -96,7 +100,7 @@ Un score **faible** = équipe enthousiaste et homogène = bien classée par le p
 | Proj A |     1      |     3      |        2        |        4        |    2     |    1     | ...
 ```
 
-- **MinEquipes / MaxEquipes** : nombre d'équipes que le projet doit/peut accueillir.
+- **MinEquipes / MaxEquipes** : nombre d'équipes que le projet doit/peut accueillir. Le minimum est contrôlé dans les bilans, mais il n'est pas encore imposé comme contrainte bloquante dans l'affectation.
 - **TailleMinEquipe / TailleMaxEquipe** : fourchette de taille d'équipe acceptable. Une équipe hors fourchette est automatiquement exclue de ce projet.
 - Les colonnes suivantes contiennent le **rang** de chaque équipe (1 = équipe préférée).
 
