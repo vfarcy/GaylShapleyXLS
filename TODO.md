@@ -1,6 +1,4 @@
-Dans votre cas, il faut distinguer **stabilité au sens Gale-Shapley** et **qualité globale de l'affectation**.
-
-Votre algorithme produit déjà une affectation stable par rapport aux préférences utilisées :
+L'algorithme produit  une affectation stable par rapport aux préférences utilisées :
 
 * les équipes proposent ;
 * les projets gardent provisoirement leurs meilleures équipes ;
@@ -8,15 +6,15 @@ Votre algorithme produit déjà une affectation stable par rapport aux préfére
 
 Cependant, plusieurs éléments réduisent la stabilité "pratique" ou la robustesse du résultat.
 
-## 1. Éliminer les ex æquo dans les classements des projets
+## 1. ✅ Éliminer les ex æquo dans les classements des projets
 
-Aujourd'hui :
+Implémenté dans le code :
 
 ```vb
-If scores(k) < scores(eq) Then rang = rang + 1
+If (scores(k) < scores(eq)) Or (scores(k) = scores(eq) And k < eq) Then rang = rang + 1
 ```
 
-Deux équipes peuvent obtenir le même rang.
+Les ex æquo sont  départagés de façon déterministe par le numéro d'équipe.
 
 Exemple :
 
@@ -26,9 +24,9 @@ Exemple :
 | E2     | 1.50  | 1    |
 | E3     | 2.00  | 3    |
 
-Quand un projet est plein, le choix de la pire équipe devient plus arbitraire.
+Quand un projet est plein, le choix de la pire équipe est reproductible.
 
-### Amélioration
+### Principe retenu
 
 Créer un ordre total :
 
@@ -41,15 +39,15 @@ Ainsi chaque projet possède une préférence stricte.
 
 ***
 
-## 2. Utiliser les préférences individuelles plutôt qu'une simple moyenne
+## 2. ✅ Utiliser les préférences individuelles plutôt qu'une simple moyenne
 
-Actuellement un projet classe les équipes selon :
+Implémenté dans le code :
 
 ```vb
-score(eq) = moyenne des rangs des membres
+score(eq) = moyenne des rangs + variance
 ```
 
-Une moyenne masque les désaccords.
+Le score projet combine la moyenne des rangs et leur dispersion.
 
 Exemple :
 
@@ -58,9 +56,9 @@ Exemple :
 | 1       | 5       | 3       |
 | 3       | 3       | 3       |
 
-Les deux équipes sont équivalentes alors que leurs profils sont très différents.
+Les équipes avec des avis trop dispersés sont donc moins favorisées.
 
-### Alternative plus robuste
+### Formule retenue
 
 Calculer :
 
@@ -74,20 +72,20 @@ ou
 Médiane des rangs
 ```
 
-Ainsi les projets privilégient les équipes dont l'intérêt est partagé par tous les membres.
+Ainsi les projets privilégient les équipes dont l'intérêt est davantage partagé par tous les membres.
 
 ***
 
-## 3. Utiliser un score de Borda
+## 3. ✅ Utiliser un score de Borda
 
-Votre vote majoritaire produit parfois des préférences d'équipes instables.
+Implémenté dans le code : les préférences d'équipe sont  agrégées avec un score de Borda.
 
 Exemple :
 
 * 2 membres préfèrent Projet A
 * 2 membres préfèrent Projet B
 
-Le gagnant dépend alors de la règle de départage.
+Les ex æquo sont départagés de façon déterministe.
 
 À la place :
 
@@ -104,7 +102,7 @@ Puis :
 ScoreProjet = Somme des points de tous les membres
 ```
 
-On obtient généralement des préférences d'équipe plus cohérentes.
+On obtient des préférences d'équipe plus cohérentes.
 
 ***
 
@@ -194,7 +192,7 @@ Cela réduit les effets liés à l'ordre des propositions.
 
 Gale-Shapley est favorable au côté qui propose.
 
-Dans votre implémentation :
+Dans l'implémentation actuelle :
 
 ```text
 Équipes = proposeurs
@@ -214,7 +212,7 @@ Pour équilibrer :
 
 ## 8. Utiliser un critère de stabilité renforcée
 
-Vous pouvez mesurer après affectation :
+Pour pouvoir mesurer après affectation :
 
 ### Satisfaction moyenne
 
@@ -253,12 +251,8 @@ C'est le véritable critère théorique de stabilité.
 
 ## Ce qui apporterait le plus de valeur
 
-Si je devais classer les améliorations :
-
 1. **Utiliser les minima dans l'affectation**.
-2. **Supprimer les ex æquo dans les classements projets**.
-3. **Remplacer le vote majoritaire par un score de Borda**.
-4. **Ajouter une phase d'amélioration locale après Gale-Shapley**.
-5. **Mesurer explicitement les paires bloquantes** pour certifier la stabilité.
+2. **Ajouter une phase d'amélioration locale après Gale-Shapley**.
+3. **Mesurer explicitement les paires bloquantes** pour certifier la stabilité.
 
-Ces cinq améliorations transformeraient votre outil d'un simple Gale-Shapley capacitaire vers un véritable système d'affectation robuste et exploitable dans un contexte pédagogique réel.
+Ces trois améliorations restantes transformeraient l'outil d'un simple Gale-Shapley capacitaire vers un véritable système d'affectation robuste et exploitable dans un contexte pédagogique réel.
