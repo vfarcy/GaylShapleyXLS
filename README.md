@@ -51,21 +51,21 @@ L'algorithme se termine nécessairement car à chaque proposition, une équipe a
 
 À la fin, l'affectation est **stable** : si une équipe E préfère un projet P à son projet actuel, alors P a déjà rencontré E et l'a rejetée au profit d'équipes qu'il classe mieux. P ne voudra donc jamais prendre E au détriment de ses affectés.
 
-### Agrégation des préférences (vote majoritaire)
+### Agrégation des préférences (score de Borda)
 
-Les préférences d'une équipe sont calculées à partir des préférences individuelles de ses membres via un **vote à la pluralité itérative** :
+Les préférences d'une équipe sont calculées à partir des préférences individuelles de ses membres via un **score de Borda** :
 
-1. À la position 1 : chaque membre vote pour son projet préféré parmi tous les projets. Le projet ayant reçu le plus de votes est placé en 1ère position dans la liste de l'équipe.
-2. Ce projet est retiré. On répète pour la position 2, etc.
-3. En cas d'égalité de votes, le projet d'indice alphabétique le plus bas gagne.
+1. Le 1er choix d'un membre rapporte N points, le 2e choix N-1 points, ..., le dernier choix 1 point.
+2. Les points sont additionnés pour chaque projet.
+3. Les projets sont ensuite triés par score décroissant, avec départage par indice le plus bas en cas d'égalité.
 
 ### Classement des équipes par les projets
 
-Pour les données de test, le rang d'une équipe auprès d'un projet est calculé comme la **moyenne des rangs** que les membres de l'équipe accordent à ce projet dans leur liste individuelle :
+Pour les données de test, le rang d'une équipe auprès d'un projet combine la **moyenne des rangs** et leur **dispersion** dans la liste individuelle des membres :
 
-$$\text{score}(\text{équipe}, \text{projet}) = \frac{1}{|\text{équipe}|} \sum_{m \in \text{équipe}} \text{rang}_m(\text{projet})$$
+$$\text{score}(\text{équipe}, \text{projet}) = \text{moyenne} + \text{variance}$$
 
-Un score **faible** = équipe enthousiaste = bien classée par le projet. Les équipes sont ensuite triées par score croissant pour obtenir le classement du projet.
+Un score **faible** = équipe enthousiaste et homogène = bien classée par le projet. Les équipes sont ensuite triées par score croissant pour obtenir le classement du projet.
 
 ---
 
@@ -77,7 +77,7 @@ Un score **faible** = équipe enthousiaste = bien classée par le projet. Les é
 |---|---|---|
 | `Préférences_Élèves` | Listes de vœux ordonnés de chaque élève | `GenererDonneesDeTest` |
 | `Équipes` | Composition des équipes (membres) | `GenererDonneesDeTest` |
-| `Préférences_Équipes` | Préférences agrégées de chaque équipe (vote majoritaire) | `GenererDonneesDeTest` |
+| `Préférences_Équipes` | Préférences agrégées de chaque équipe (score de Borda) | `GenererDonneesDeTest` |
 | `Préférences_Projets` | Capacités + classement des équipes par chaque projet | `GenererDonneesDeTest` |
 | `Résultats` | Équipes affectées à chaque projet + statut capacité | Macros 2 ou 3 |
 | `Log_Affectation` | Journal détaillé étape par étape | `AffectationEquipesPasAPas` |
@@ -108,8 +108,8 @@ Un score **faible** = équipe enthousiaste = bien classée par le projet. Les é
 Génère l'ensemble des données de test en 4 étapes :
 1. Préférences individuelles aléatoires de chaque élève (mélange Fisher-Yates).
 2. Formation aléatoire des équipes (taille variable dans la fourchette saisie).
-3. Calcul des préférences des équipes par **vote majoritaire** à partir des préférences individuelles.
-4. Calcul des classements des projets (basés sur la moyenne des rangs individuels).
+3. Calcul des préférences des équipes par **score de Borda** à partir des préférences individuelles.
+4. Calcul des classements des projets (basés sur la moyenne des rangs individuels et leur dispersion).
 
 Paramètres saisis via `InputBox` : nombre d'élèves, nombre de projets, taille min et max des équipes.
 
@@ -199,8 +199,8 @@ AffectationEquipesPasAPas   ←── (ou AffectationEquipesProjets pour plus de
 
 | # | Limite | Impact |
 |---|---|---|
-| 1 | **Ex-aequo dans les classements** — deux équipes avec le même score reçoivent le même rang (le rang suivant est sauté) | Comportement équitable mais non déterministe en cas d'éviction |
-| 2 | **Vote majoritaire** — peut produire des cycles de Condorcet ; l'implémentation les résout en faveur de l'indice le plus bas | Cas rare, impact marginal |
+| 1 | **Ex-aequo dans les classements** — deux équipes avec le même score sont départagées de façon déterministe par leur numéro | Comportement stable et reproductible |
+| 2 | **Score de Borda** — peut produire des égalités de score ; l'implémentation les résout en faveur de l'indice le plus bas | Cas rare, impact marginal |
 | 3 | **Équipes sans vœux compatibles** — si tous les projets sont incompatibles avec la taille d'une équipe, elle reste non affectée | Signalé dans `Details_Suivi` |
 
 ---
@@ -261,7 +261,7 @@ Certaines versions d'Excel demandent une confirmation lors de l'ouverture d'un c
 | Correction | Date | Impact |
 |---|---|---|
 | ✅ Levée de la limite de 26 projets | 2026-07 | Passage de noms lettres (A-Z) à numérotation (1, 2, 3, ...). Support illimité. |
-| ✅ Décodage des noms de projets (Macro 1) | 2026-07 | Vote majoritaire fonctionne maintenant avec la nouvelle numérotation |
+| ✅ Décodage des noms de projets (Macro 1) | 2026-07 | Agrégation des préférences d'équipe compatible avec la nouvelle numérotation |
 | ✅ Correction de la déclaration dupliquée | 2026-07 | Erreur de compilation `projLookup` supprimée |
 | ✅ Documentation d'installation complète | 2026-07 | Section "Installation et intégration du code VBA" ajoutée |
 

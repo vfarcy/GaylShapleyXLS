@@ -5,7 +5,7 @@ Option Explicit
 ' Feuilles générées :
 '   - Préférences_Élèves  : préférences individuelles de chaque élève
 '   - Équipes             : composition de chaque équipe
-'   - Préférences_Équipes : préférences agrégées de chaque équipe (vote majoritaire)
+'   - Préférences_Équipes : préférences agrégées de chaque équipe (score de Borda)
 '   - Préférences_Projets : classement des équipes par projet + capacités
 '================================================================================================
 Sub GenererDonneesDeTest()
@@ -22,9 +22,10 @@ Sub GenererDonneesDeTest()
     Dim prefsMembres() As String, projUsed() As Boolean
     Dim pos As Long, pIdx As Long, maxV As Long, winner As Long, votesP() As Long
     Dim minEq As Long, maxEq As Long
-    Dim projetNom As String, scoreTotal As Double
+    Dim projetNom As String, scoreTotal As Double, scoreDispersion As Double, moyenneScore As Double
     Dim scores() As Double, eNo As Long
     Dim rang As Long, rangs() As Long
+    Dim scoresBorda() As Double, ordreProjets() As Long, pointBorda As Long
 
     ' === DÉBUT DU CODE EXÉCUTABLE ===
     On Error Resume Next
@@ -142,14 +143,13 @@ Sub GenererDonneesDeTest()
     wsEq.Columns.AutoFit
 
     ' ======================================================================
-    ' ÉTAPE 3 : Calcul des préférences d'équipes par vote majoritaire
+    ' ÉTAPE 3 : Calcul des préférences d'équipes par score de Borda
     '
-    ' À chaque position, on identifie le premier choix restant de chaque membre
-    ' et le projet avec le plus de votes obtient cette position dans la liste
-    ' de l'équipe. En cas d'égalité, le projet d'indice le plus bas gagne.
+    ' Chaque membre attribue N points à son 1er choix, N-1 à son 2e choix, ...
+    ' et 1 point à son dernier choix. Les scores sont additionnés pour classer
+    ' les projets de l'équipe.
     ' ======================================================================
     Set wsPE = ThisWorkbook.Sheets("Préférences_Équipes")
-    ReDim projUsed(1 To nbProjets)
 
     wsPE.Cells.Clear
     wsPE.Cells(1, 1).Value = "Équipe"
@@ -171,41 +171,43 @@ Sub GenererDonneesDeTest()
             Next j
         Next i
 
-        ' Vote majoritaire position par position
-        ReDim projUsed(1 To nbProjets)
-
-        For pos = 1 To nbProjets
-            ReDim votesP(1 To nbProjets)
-
-            For i = 1 To nbM
-                ' Premier choix restant de ce membre
-                For j = 1 To nbProjets
-                    ' Chercher l'index du projet dans projs() par son nom
-                    projLookup = 0
-                    For k = 1 To nbProjets
-                        If projs(k) = prefsMembres(i, j) Then
-                            projLookup = k
-                            Exit For
-                        End If
-                    Next k
-                    If projLookup > 0 And Not projUsed(projLookup) Then
-                        votesP(projLookup) = votesP(projLookup) + 1
+        ' Score de Borda pour chaque projet : score plus élevé = mieux classé
+        ReDim scoresBorda(1 To nbProjets)
+        For i = 1 To nbM
+            For j = 1 To nbProjets
+                projLookup = 0
+                For k = 1 To nbProjets
+                    If projs(k) = prefsMembres(i, j) Then
+                        projLookup = k
                         Exit For
                     End If
-                Next j
-            Next i
-
-            ' Projet gagnant : le plus de votes (ex-aequo : indice le plus bas)
-            maxV = -1
-            winner = 0
-            For j = 1 To nbProjets
-                If Not projUsed(j) And votesP(j) > maxV Then
-                    maxV = votesP(j): winner = j
+                Next k
+                If projLookup > 0 Then
+                    pointBorda = nbProjets - j + 1
+                    scoresBorda(projLookup) = scoresBorda(projLookup) + pointBorda
                 End If
             Next j
+        Next i
 
-            wsPE.Cells(eq + 1, 1 + pos).Value = "Projet " & winner
-            projUsed(winner) = True
+        ' Tri décroissant des projets selon le score de Borda (ex-aequo : indice le plus bas)
+        ReDim ordreProjets(1 To nbProjets)
+        For j = 1 To nbProjets
+            ordreProjets(j) = j
+        Next j
+
+        For i = 1 To nbProjets - 1
+            For j = i + 1 To nbProjets
+                If (scoresBorda(ordreProjets(j)) > scoresBorda(ordreProjets(i))) Or _
+                   ((scoresBorda(ordreProjets(j)) = scoresBorda(ordreProjets(i))) And (ordreProjets(j) < ordreProjets(i))) Then
+                    pIdx = ordreProjets(i)
+                    ordreProjets(i) = ordreProjets(j)
+                    ordreProjets(j) = pIdx
+                End If
+            Next j
+        Next i
+
+        For pos = 1 To nbProjets
+            wsPE.Cells(eq + 1, 1 + pos).Value = "Projet " & ordreProjets(pos)
         Next pos
     Next eq
     wsPE.Columns.AutoFit
@@ -238,11 +240,13 @@ Sub GenererDonneesDeTest()
         wsP.Cells(i + 1, 4).Value = tailleMin    ' Le projet accepte des équipes de taille comprise
         wsP.Cells(i + 1, 5).Value = tailleMax    ' dans la fourchette globale de génération
 
-        ' Calcul des scores : score(eq) = moyenne du rang du projet chez les membres de eq
+        ' Calcul des scores : score(eq) = moyenne des rangs + dispersion des rangs
+        ' Une équipe avec un intérêt partagé par tous ses membres obtient donc un meilleur score.
         projetNom = "Projet " & i
         ReDim scores(1 To nbEquipes)
         For eq = 1 To nbEquipes
             scoreTotal = 0
+            scoreDispersion = 0
             For j = 1 To eqTaille(eq)
                 eNo = elevesShuf(eqDebut(eq) + j - 1)
                 For k = 1 To nbProjets
@@ -251,16 +255,27 @@ Sub GenererDonneesDeTest()
                     End If
                 Next k
             Next j
-            scores(eq) = scoreTotal / eqTaille(eq)
+            moyenneScore = scoreTotal / eqTaille(eq)
+            For j = 1 To eqTaille(eq)
+                eNo = elevesShuf(eqDebut(eq) + j - 1)
+                For k = 1 To nbProjets
+                    If prefsInd(eNo, k) = projetNom Then
+                        scoreDispersion = scoreDispersion + (k - moyenneScore) ^ 2
+                        Exit For
+                    End If
+                Next k
+            Next j
+            scoreDispersion = scoreDispersion / eqTaille(eq)
+            scores(eq) = moyenneScore + scoreDispersion
         Next eq
 
         ' Attribution des rangs (rang 1 = score le plus bas = équipe la plus enthousiaste)
-        ' Ex-aequo : le même rang est attribué (le rang suivant est donc sauté)
+        ' En cas d'égalité de score, on départage par numéro d'équipe pour obtenir un ordre strict.
         ReDim rangs(1 To nbEquipes)
         For eq = 1 To nbEquipes
             rang = 1
             For k = 1 To nbEquipes
-                If scores(k) < scores(eq) Then rang = rang + 1
+                If (scores(k) < scores(eq)) Or (scores(k) = scores(eq) And k < eq) Then rang = rang + 1
             Next k
             rangs(eq) = rang
         Next eq
