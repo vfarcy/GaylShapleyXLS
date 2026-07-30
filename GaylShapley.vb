@@ -1,6 +1,434 @@
 Option Explicit
 
 '================================================================================================
+' MACRO 0 : INITIALISER LES FEUILLES DE RÉPONSES FORMULAIRES
+' Feuilles créées/vidées :
+'   - Reponses_Eleves
+'   - Reponses_Commanditaires
+'   - Instructions_Formulaires
+'================================================================================================
+Sub InitialiserFeuillesFormulaires()
+    Dim wsEleves As Worksheet, wsCmd As Worksheet, wsInfo As Worksheet
+
+    Set wsEleves = EnsureSheet("Reponses_Eleves")
+    Set wsCmd = EnsureSheet("Reponses_Commanditaires")
+    Set wsInfo = EnsureSheet("Instructions_Formulaires")
+
+    Application.ScreenUpdating = False
+
+    wsEleves.Cells.Clear
+    wsEleves.Range("A1:H1").Value = Array("Horodatage", "Email", "Equipe", "Eleve", "Choix 1", "Choix 2", "Choix 3", "Choix 4")
+    wsEleves.Rows(1).Font.Bold = True
+    wsEleves.Columns.AutoFit
+
+    wsCmd.Cells.Clear
+    wsCmd.Range("A1:G1").Value = Array("Horodatage", "Email", "Projet", "MinEquipes", "MaxEquipes", "TailleMinEquipe", "TailleMaxEquipe")
+    wsCmd.Rows(1).Font.Bold = True
+    wsCmd.Columns.AutoFit
+
+    wsInfo.Cells.Clear
+    wsInfo.Cells(1, 1).Value = "Mode formulaires"
+    wsInfo.Cells(1, 1).Font.Bold = True
+    wsInfo.Cells(3, 1).Value = "1) Formulaire Eleves :"
+    wsInfo.Cells(4, 1).Value = "   Champs recommandes: Email, Equipe, Eleve, Choix 1..Choix N"
+    wsInfo.Cells(5, 1).Value = "   Exportez les reponses dans la feuille Reponses_Eleves (copier-coller ou CSV)."
+    wsInfo.Cells(7, 1).Value = "2) Formulaire Commanditaires :"
+    wsInfo.Cells(8, 1).Value = "   Champs recommandes: Email, Projet, MinEquipes, MaxEquipes, TailleMinEquipe, TailleMaxEquipe"
+    wsInfo.Cells(9, 1).Value = "   Exportez les reponses dans la feuille Reponses_Commanditaires."
+    wsInfo.Cells(11, 1).Value = "3) Lancez ensuite la macro GenererDonneesDepuisFormulaires."
+    wsInfo.Cells(13, 1).Value = "4) Puis executez AffectationEquipesPasAPas (ou AffectationEquipesProjets)."
+    wsInfo.Columns.AutoFit
+
+    Application.ScreenUpdating = True
+    MsgBox "Feuilles de formulaires initialisees. Vous pouvez coller les reponses exportees.", vbInformation
+End Sub
+
+
+'================================================================================================
+' MACRO 0 TER : CONFIGURATION DE L'IMPORT AUTOMATIQUE DES FICHIERS FORMS
+' Feuille créée :
+'   - Config_Import_Formulaires
+'================================================================================================
+Sub InitialiserConfigurationImportFormulaires()
+    Dim wsCfg As Worksheet
+
+    Set wsCfg = EnsureSheet("Config_Import_Formulaires")
+
+    wsCfg.Cells.Clear
+    wsCfg.Range("A1:B1").Value = Array("Source", "CheminFichierExcel")
+    wsCfg.Range("A2:B2").Value = Array("Eleves", "")
+    wsCfg.Range("A3:B3").Value = Array("Commanditaires", "")
+    wsCfg.Rows(1).Font.Bold = True
+
+    wsCfg.Cells(5, 1).Value = "Mode d'emploi"
+    wsCfg.Cells(5, 1).Font.Bold = True
+    wsCfg.Cells(6, 1).Value = "1) Ouvrir chaque formulaire Microsoft Forms puis 'Ouvrir dans Excel'."
+    wsCfg.Cells(7, 1).Value = "2) Enregistrer les deux fichiers Excel (eleves et commanditaires)."
+    wsCfg.Cells(8, 1).Value = "3) Renseigner leurs chemins en colonne B (ou laisser vide : la macro les demandera)."
+    wsCfg.Cells(9, 1).Value = "4) Lancer ImporterReponsesFormulairesAutomatique."
+    wsCfg.Columns("A:B").AutoFit
+
+    MsgBox "Feuille de configuration d'import automatique initialisee.", vbInformation
+End Sub
+
+
+'================================================================================================
+' MACRO 0 QUATER : IMPORT AUTOMATIQUE DES RÉPONSES FORMS (SANS COPIER-COLLER)
+' Feuilles lues    : Config_Import_Formulaires + 2 fichiers Excel exports Forms
+' Feuilles écrites : Reponses_Eleves, Reponses_Commanditaires puis feuilles d'entrée algorithme
+'================================================================================================
+Sub ImporterReponsesFormulairesAutomatique()
+    Dim wsCfg As Worksheet, wsRE As Worksheet, wsRC As Worksheet
+    Dim pathEleves As String, pathCmd As String
+    Dim pick As Variant
+
+    Set wsCfg = EnsureSheet("Config_Import_Formulaires")
+    Set wsRE = EnsureSheet("Reponses_Eleves")
+    Set wsRC = EnsureSheet("Reponses_Commanditaires")
+
+    pathEleves = Trim(CStr(wsCfg.Cells(2, 2).Value))
+    pathCmd = Trim(CStr(wsCfg.Cells(3, 2).Value))
+
+    If pathEleves = "" Or Dir(pathEleves) = "" Then
+        pick = Application.GetOpenFilename("Fichiers Excel (*.xlsx;*.xlsm),*.xlsx;*.xlsm", , "Selectionner le fichier de reponses Eleves")
+        If VarType(pick) = vbBoolean Then Exit Sub
+        pathEleves = CStr(pick)
+        wsCfg.Cells(2, 2).Value = pathEleves
+    End If
+
+    If pathCmd = "" Or Dir(pathCmd) = "" Then
+        pick = Application.GetOpenFilename("Fichiers Excel (*.xlsx;*.xlsm),*.xlsx;*.xlsm", , "Selectionner le fichier de reponses Commanditaires")
+        If VarType(pick) = vbBoolean Then Exit Sub
+        pathCmd = CStr(pick)
+        wsCfg.Cells(3, 2).Value = pathCmd
+    End If
+
+    Application.ScreenUpdating = False
+    ImporterFeuilleReponsesDepuisFichier pathEleves, wsRE
+    ImporterFeuilleReponsesDepuisFichier pathCmd, wsRC
+    Application.ScreenUpdating = True
+
+    ' Reutilise le pipeline deja en place pour produire les feuilles d'entree.
+    GenererDonneesDepuisFormulaires
+End Sub
+
+
+'================================================================================================
+' MACRO 0 BIS : GÉNÉRER LES DONNÉES D'ENTRÉE DE L'ALGORITHME À PARTIR DES FORMULAIRES
+' Feuilles lues  : Reponses_Eleves, Reponses_Commanditaires
+' Feuilles écrites : Préférences_Élèves, Équipes, Préférences_Équipes, Préférences_Projets
+'================================================================================================
+Sub GenererDonneesDepuisFormulaires()
+    Dim wsRE As Worksheet, wsRC As Worksheet
+    Dim wsE As Worksheet, wsEq As Worksheet, wsPE As Worksheet, wsP As Worksheet
+    Dim i As Long, j As Long, k As Long, pos As Long
+    Dim lastRowRE As Long, lastColRE As Long, lastRowRC As Long
+    Dim nomProjet As String, nomEquipe As String, nomEleve As String, choix As String
+    Dim keyProj As String, canonProjet As String
+    Dim projetsOrdre As Collection, equipesOrdre As Collection, elevesOrdre As Collection
+    Dim projetsMap As Object, projetsMeta As Object
+    Dim equipesMembres As Object, prefsEleves As Object, rangsEleves As Object
+    Dim projectIndex As Object
+    Dim membres As Collection, prefs As Collection, prefsMembre As Collection
+    Dim usedProjets As Object, rangMap As Object
+    Dim nbProjets As Long, nbEquipes As Long, maxMembres As Long
+    Dim scoresBorda() As Double, ordreProjets() As Long, pointBorda As Long, pIdx As Long
+    Dim minEq As Long, maxEq As Long, tailleMin As Long, tailleMax As Long
+    Dim scoreTotal As Double, moyenneScore As Double, scoreDispersion As Double
+    Dim scores() As Double, rangs() As Long, rang As Long
+    Dim equipeNom As String, projetNom As String, membreNom As Variant
+    Dim eqIdx As Long, projIdx As Long
+    Dim meta As Variant
+
+    On Error Resume Next
+    Set wsRE = ThisWorkbook.Sheets("Reponses_Eleves")
+    Set wsRC = ThisWorkbook.Sheets("Reponses_Commanditaires")
+    On Error GoTo 0
+
+    If wsRE Is Nothing Or wsRC Is Nothing Then
+        MsgBox "Feuilles Reponses_Eleves/Reponses_Commanditaires introuvables. Lancez d'abord InitialiserFeuillesFormulaires.", vbCritical
+        Exit Sub
+    End If
+
+    lastRowRE = wsRE.Cells(wsRE.Rows.Count, "A").End(xlUp).Row
+    lastColRE = wsRE.Cells(1, wsRE.Columns.Count).End(xlToLeft).Column
+    lastRowRC = wsRC.Cells(wsRC.Rows.Count, "A").End(xlUp).Row
+
+    If lastRowRE < 2 Then
+        MsgBox "Aucune reponse eleve detectee.", vbCritical
+        Exit Sub
+    End If
+    If lastColRE < 5 Then
+        MsgBox "La feuille Reponses_Eleves doit contenir les colonnes Choix 1..Choix N (a partir de la colonne E).", vbCritical
+        Exit Sub
+    End If
+    If lastRowRC < 2 Then
+        MsgBox "Aucune reponse commanditaire detectee.", vbCritical
+        Exit Sub
+    End If
+
+    Application.ScreenUpdating = False
+
+    Set wsE = EnsureSheet("Préférences_Élèves")
+    Set wsEq = EnsureSheet("Équipes")
+    Set wsPE = EnsureSheet("Préférences_Équipes")
+    Set wsP = EnsureSheet("Préférences_Projets")
+
+    Set projetsOrdre = New Collection
+    Set equipesOrdre = New Collection
+    Set elevesOrdre = New Collection
+    Set projetsMap = CreateObject("Scripting.Dictionary")
+    Set projetsMeta = CreateObject("Scripting.Dictionary")
+    Set equipesMembres = CreateObject("Scripting.Dictionary")
+    Set prefsEleves = CreateObject("Scripting.Dictionary")
+    Set rangsEleves = CreateObject("Scripting.Dictionary")
+    Set projectIndex = CreateObject("Scripting.Dictionary")
+
+    ' --- 1) Lecture des projets depuis les reponses commanditaires ---
+    For i = 2 To lastRowRC
+        nomProjet = Trim(CStr(wsRC.Cells(i, 3).Value))
+        If nomProjet <> "" Then
+            keyProj = LCase(nomProjet)
+            If Not projetsMap.Exists(keyProj) Then
+                projetsMap.Add keyProj, nomProjet
+                projetsOrdre.Add nomProjet
+            End If
+
+            canonProjet = CStr(projetsMap(keyProj))
+            minEq = ReadLongOrDefault(wsRC.Cells(i, 4).Value, 1)
+            If minEq < 0 Then minEq = 0
+            maxEq = ReadLongOrDefault(wsRC.Cells(i, 5).Value, minEq)
+            If maxEq < minEq Then maxEq = minEq
+            tailleMin = ReadLongOrDefault(wsRC.Cells(i, 6).Value, 1)
+            If tailleMin < 1 Then tailleMin = 1
+            tailleMax = ReadLongOrDefault(wsRC.Cells(i, 7).Value, tailleMin)
+            If tailleMax < tailleMin Then tailleMax = tailleMin
+
+            projetsMeta(canonProjet) = Array(minEq, maxEq, tailleMin, tailleMax)
+        End If
+    Next i
+
+    nbProjets = projetsOrdre.Count
+    If nbProjets = 0 Then
+        Application.ScreenUpdating = True
+        MsgBox "Aucun projet valide detecte dans Reponses_Commanditaires.", vbCritical
+        Exit Sub
+    End If
+
+    For i = 1 To nbProjets
+        projectIndex(CStr(projetsOrdre(i))) = i
+    Next i
+
+    ' --- 2) Lecture des eleves, equipes et preferences individuelles ---
+    For i = 2 To lastRowRE
+        nomEquipe = Trim(CStr(wsRE.Cells(i, 3).Value))
+        nomEleve = Trim(CStr(wsRE.Cells(i, 4).Value))
+
+        If nomEquipe <> "" And nomEleve <> "" Then
+            If prefsEleves.Exists(nomEleve) Then
+                Application.ScreenUpdating = True
+                MsgBox "Nom d'eleve duplique detecte : " & nomEleve & ". Utilisez un identifiant unique par ligne.", vbCritical
+                Exit Sub
+            End If
+
+            If Not equipesMembres.Exists(nomEquipe) Then
+                Set membres = New Collection
+                equipesMembres.Add nomEquipe, membres
+                equipesOrdre.Add nomEquipe
+            End If
+            Set membres = equipesMembres(nomEquipe)
+            membres.Add nomEleve
+
+            Set prefs = New Collection
+            Set usedProjets = CreateObject("Scripting.Dictionary")
+
+            For j = 5 To lastColRE
+                choix = Trim(CStr(wsRE.Cells(i, j).Value))
+                canonProjet = CanonicalProjectName(choix, projetsMap)
+                If canonProjet <> "" Then
+                    If Not usedProjets.Exists(canonProjet) Then
+                        usedProjets.Add canonProjet, True
+                        prefs.Add canonProjet
+                    End If
+                End If
+            Next j
+
+            ' Complete avec les projets non cites pour garder une preference complete
+            For j = 1 To nbProjets
+                projetNom = CStr(projetsOrdre(j))
+                If Not usedProjets.Exists(projetNom) Then prefs.Add projetNom
+            Next j
+
+            prefsEleves.Add nomEleve, prefs
+            elevesOrdre.Add nomEleve
+
+            Set rangMap = CreateObject("Scripting.Dictionary")
+            For j = 1 To prefs.Count
+                rangMap(CStr(prefs(j))) = j
+            Next j
+            rangsEleves.Add nomEleve, rangMap
+        End If
+    Next i
+
+    nbEquipes = equipesOrdre.Count
+    If nbEquipes = 0 Then
+        Application.ScreenUpdating = True
+        MsgBox "Aucune equipe valide detectee dans Reponses_Eleves.", vbCritical
+        Exit Sub
+    End If
+
+    ' --- 3) Ecriture Préférences_Élèves ---
+    wsE.Cells.Clear
+    wsE.Cells(1, 1).Value = "Élève"
+    For i = 1 To nbProjets
+        wsE.Cells(1, 1 + i).Value = "Choix " & i
+    Next i
+    wsE.Rows(1).Font.Bold = True
+
+    For i = 1 To elevesOrdre.Count
+        nomEleve = CStr(elevesOrdre(i))
+        wsE.Cells(i + 1, 1).Value = nomEleve
+        Set prefs = prefsEleves(nomEleve)
+        For j = 1 To nbProjets
+            wsE.Cells(i + 1, 1 + j).Value = CStr(prefs(j))
+        Next j
+    Next i
+    wsE.Columns.AutoFit
+
+    ' --- 4) Ecriture Équipes ---
+    wsEq.Cells.Clear
+    wsEq.Cells(1, 1).Value = "Équipe"
+    wsEq.Rows(1).Font.Bold = True
+
+    maxMembres = 0
+    For i = 1 To nbEquipes
+        Set membres = equipesMembres(CStr(equipesOrdre(i)))
+        If membres.Count > maxMembres Then maxMembres = membres.Count
+    Next i
+    For i = 1 To maxMembres
+        wsEq.Cells(1, 1 + i).Value = "Membre " & i
+    Next i
+
+    For i = 1 To nbEquipes
+        equipeNom = CStr(equipesOrdre(i))
+        wsEq.Cells(i + 1, 1).Value = equipeNom
+        Set membres = equipesMembres(equipeNom)
+        For j = 1 To membres.Count
+            wsEq.Cells(i + 1, 1 + j).Value = CStr(membres(j))
+        Next j
+    Next i
+    wsEq.Columns.AutoFit
+
+    ' --- 5) Ecriture Préférences_Équipes (Borda) ---
+    wsPE.Cells.Clear
+    wsPE.Cells(1, 1).Value = "Équipe"
+    For i = 1 To nbProjets
+        wsPE.Cells(1, 1 + i).Value = "Choix " & i
+    Next i
+    wsPE.Rows(1).Font.Bold = True
+
+    For eqIdx = 1 To nbEquipes
+        equipeNom = CStr(equipesOrdre(eqIdx))
+        wsPE.Cells(eqIdx + 1, 1).Value = equipeNom
+        ReDim scoresBorda(1 To nbProjets)
+
+        Set membres = equipesMembres(equipeNom)
+        For Each membreNom In membres
+            Set prefsMembre = prefsEleves(CStr(membreNom))
+            For pos = 1 To nbProjets
+                projetNom = CStr(prefsMembre(pos))
+                pIdx = CLng(projectIndex(projetNom))
+                pointBorda = nbProjets - pos + 1
+                scoresBorda(pIdx) = scoresBorda(pIdx) + pointBorda
+            Next pos
+        Next membreNom
+
+        ReDim ordreProjets(1 To nbProjets)
+        For i = 1 To nbProjets
+            ordreProjets(i) = i
+        Next i
+
+        For i = 1 To nbProjets - 1
+            For j = i + 1 To nbProjets
+                If (scoresBorda(ordreProjets(j)) > scoresBorda(ordreProjets(i))) Or _
+                   ((scoresBorda(ordreProjets(j)) = scoresBorda(ordreProjets(i))) And (ordreProjets(j) < ordreProjets(i))) Then
+                    k = ordreProjets(i)
+                    ordreProjets(i) = ordreProjets(j)
+                    ordreProjets(j) = k
+                End If
+            Next j
+        Next i
+
+        For i = 1 To nbProjets
+            wsPE.Cells(eqIdx + 1, 1 + i).Value = CStr(projetsOrdre(ordreProjets(i)))
+        Next i
+    Next eqIdx
+    wsPE.Columns.AutoFit
+
+    ' --- 6) Ecriture Préférences_Projets ---
+    wsP.Cells.Clear
+    wsP.Cells(1, 1).Value = "Projet"
+    wsP.Cells(1, 2).Value = "MinEquipes"
+    wsP.Cells(1, 3).Value = "MaxEquipes"
+    wsP.Cells(1, 4).Value = "TailleMinEquipe"
+    wsP.Cells(1, 5).Value = "TailleMaxEquipe"
+    For eqIdx = 1 To nbEquipes
+        wsP.Cells(1, 5 + eqIdx).Value = CStr(equipesOrdre(eqIdx))
+    Next eqIdx
+    wsP.Rows(1).Font.Bold = True
+
+    For projIdx = 1 To nbProjets
+        projetNom = CStr(projetsOrdre(projIdx))
+        meta = projetsMeta(projetNom)
+        wsP.Cells(projIdx + 1, 1).Value = projetNom
+        wsP.Cells(projIdx + 1, 2).Value = CLng(meta(0))
+        wsP.Cells(projIdx + 1, 3).Value = CLng(meta(1))
+        wsP.Cells(projIdx + 1, 4).Value = CLng(meta(2))
+        wsP.Cells(projIdx + 1, 5).Value = CLng(meta(3))
+
+        ReDim scores(1 To nbEquipes)
+        For eqIdx = 1 To nbEquipes
+            equipeNom = CStr(equipesOrdre(eqIdx))
+            Set membres = equipesMembres(equipeNom)
+            scoreTotal = 0
+            scoreDispersion = 0
+
+            For Each membreNom In membres
+                Set rangMap = rangsEleves(CStr(membreNom))
+                scoreTotal = scoreTotal + CDbl(rangMap(projetNom))
+            Next membreNom
+
+            moyenneScore = scoreTotal / membres.Count
+
+            For Each membreNom In membres
+                Set rangMap = rangsEleves(CStr(membreNom))
+                scoreDispersion = scoreDispersion + (CDbl(rangMap(projetNom)) - moyenneScore) ^ 2
+            Next membreNom
+
+            scoreDispersion = scoreDispersion / membres.Count
+            scores(eqIdx) = moyenneScore + scoreDispersion
+        Next eqIdx
+
+        ReDim rangs(1 To nbEquipes)
+        For eqIdx = 1 To nbEquipes
+            rang = 1
+            For k = 1 To nbEquipes
+                If (scores(k) < scores(eqIdx)) Or (scores(k) = scores(eqIdx) And k < eqIdx) Then rang = rang + 1
+            Next k
+            rangs(eqIdx) = rang
+        Next eqIdx
+
+        For eqIdx = 1 To nbEquipes
+            wsP.Cells(projIdx + 1, 5 + eqIdx).Value = rangs(eqIdx)
+        Next eqIdx
+    Next projIdx
+    wsP.Columns.AutoFit
+
+    Application.ScreenUpdating = True
+    MsgBox "Donnees importees depuis formulaires : " & elevesOrdre.Count & " eleves, " & nbEquipes & " equipes, " & nbProjets & " projets.", vbInformation
+End Sub
+
+'================================================================================================
 ' MACRO 1 : GÉNÉRATION DES DONNÉES DE TEST
 ' Feuilles générées :
 '   - Préférences_Élèves  : préférences individuelles de chaque élève
@@ -772,11 +1200,12 @@ End Sub
 Sub BilanPerformanceAlgorithme()
 
     Dim wsR As Worksheet, wsPE As Worksheet, wsP As Worksheet
-    Dim wsBilan As Worksheet, wsDetails As Worksheet
+    Dim wsBilan As Worksheet, wsDetails As Worksheet, wsKPI As Worksheet
     Dim i As Long, j As Long, eq As Variant, projet As Variant
     Dim nomP As String, listeStr As String, arr As Variant, nomEq As String
     Dim affectationsEquipe As Object, affectationsProjet As Object
     Dim prefsEquipes As Object, projetsCapacites As Object
+    Dim projetsMin As Object, projetsMax As Object
     Dim nbEquipesTotal As Long, nbEquipesAffectees As Long
     Dim nbChoix1 As Long, nbChoix2 As Long, nbChoix3 As Long
     Dim rangsObtenus As Collection, equipesSansProjet As Collection
@@ -784,7 +1213,15 @@ Sub BilanPerformanceAlgorithme()
     Dim somme As Double, sc As Double, ri As Variant
     Dim projetsSousMinimum As Collection, projetsVides As Collection
     Dim nbProjetsMinAtteint As Long, rangMoyen As Double, ecartType As Double
-    Dim ligne As Long, ld As Long
+    Dim ligne As Long, ld As Long, ligneKpi As Long
+    Dim nbVoeuxParEquipe As Long, nbTop3 As Long, nbRang4Plus As Long
+    Dim totalCapaciteMin As Long, totalCapaciteMax As Long, totalDeficitMin As Long
+    Dim tauxAffectation As Double, tauxTop1 As Double, tauxTop3 As Double, frustration As Double
+    Dim satisfactionPonderee As Double, satisfactionNormalisee As Double, equiteNormalisee As Double
+    Dim tauxProjetsMinAtteint As Double, tauxProjetsVides As Double
+    Dim tauxRemplissageCapacite As Double, tensionCapacitaire As Double, robustesseCapacitaire As Double
+    Dim ratioDeficitMin As Double
+    Dim minEq As Long, maxEq As Long
 
     On Error Resume Next
     Set wsR       = ThisWorkbook.Sheets("Résultats")
@@ -792,9 +1229,14 @@ Sub BilanPerformanceAlgorithme()
     Set wsP       = ThisWorkbook.Sheets("Préférences_Projets")
     Set wsBilan   = ThisWorkbook.Sheets("Bilan_Performance")
     Set wsDetails = ThisWorkbook.Sheets("Details_Suivi")
+    Set wsKPI     = ThisWorkbook.Sheets("Dashboard_KPI_Metier")
     If wsDetails Is Nothing Then
         Set wsDetails = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
         wsDetails.Name = "Details_Suivi"
+    End If
+    If wsKPI Is Nothing Then
+        Set wsKPI = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
+        wsKPI.Name = "Dashboard_KPI_Metier"
     End If
     On Error GoTo 0
 
@@ -811,6 +1253,8 @@ Sub BilanPerformanceAlgorithme()
     Set affectationsProjet  = CreateObject("Scripting.Dictionary")
     Set prefsEquipes        = CreateObject("Scripting.Dictionary")
     Set projetsCapacites    = CreateObject("Scripting.Dictionary")
+    Set projetsMin          = CreateObject("Scripting.Dictionary")
+    Set projetsMax          = CreateObject("Scripting.Dictionary")
 
     For i = 2 To wsR.Cells(wsR.Rows.Count, "A").End(xlUp).Row
         nomP = Trim(wsR.Cells(i, 1).Value)
@@ -838,7 +1282,11 @@ Sub BilanPerformanceAlgorithme()
     For i = 2 To wsP.Cells(wsP.Rows.Count, "A").End(xlUp).Row
         nomP = Trim(wsP.Cells(i, 1).Value)
         If nomP <> "" Then
-            projetsCapacites(nomP) = Array(CLng(wsP.Cells(i, 2).Value), CLng(wsP.Cells(i, 3).Value))
+            minEq = CLng(wsP.Cells(i, 2).Value)
+            maxEq = CLng(wsP.Cells(i, 3).Value)
+            projetsCapacites(nomP) = Array(minEq, maxEq)
+            projetsMin(nomP) = minEq
+            projetsMax(nomP) = maxEq
         End If
     Next i
 
@@ -850,16 +1298,25 @@ Sub BilanPerformanceAlgorithme()
     Set projetsSousMinimum = New Collection
     Set projetsVides = New Collection
     nbProjetsMinAtteint = 0
+    nbVoeuxParEquipe = 0
+    nbTop3 = 0
+    nbRang4Plus = 0
+    totalCapaciteMin = 0
+    totalCapaciteMax = 0
+    totalDeficitMin = 0
 
     For Each eq In prefsEquipes.Keys
         If affectationsEquipe.Exists(eq) Then
             rang = 0
             Set prefs = prefsEquipes(eq)
+            If prefs.Count > nbVoeuxParEquipe Then nbVoeuxParEquipe = prefs.Count
             For j = 1 To prefs.Count
                 If StrComp(prefs(j), affectationsEquipe(eq), vbTextCompare) = 0 Then rang = j: Exit For
             Next j
             If rang > 0 Then
                 rangsObtenus.Add rang
+                If rang <= 3 Then nbTop3 = nbTop3 + 1
+                If rang >= 4 Then nbRang4Plus = nbRang4Plus + 1
                 Select Case rang
                     Case 1: nbChoix1 = nbChoix1 + 1
                     Case 2: nbChoix2 = nbChoix2 + 1
@@ -873,8 +1330,14 @@ Sub BilanPerformanceAlgorithme()
 
     For Each projet In projetsCapacites.Keys
         nbAff = IIf(affectationsProjet.Exists(projet), affectationsProjet(projet).Count, 0)
+        minEq = CLng(projetsMin(projet))
+        maxEq = CLng(projetsMax(projet))
+        totalCapaciteMin = totalCapaciteMin + minEq
+        totalCapaciteMax = totalCapaciteMax + maxEq
+        totalDeficitMin = totalDeficitMin + IIf(nbAff < minEq, minEq - nbAff, 0)
+
         If nbAff = 0 Then projetsVides.Add projet
-        If nbAff < projetsCapacites(projet)(0) Then
+        If nbAff < minEq Then
             projetsSousMinimum.Add projet
         Else
             nbProjetsMinAtteint = nbProjetsMinAtteint + 1
@@ -891,6 +1354,35 @@ Sub BilanPerformanceAlgorithme()
             ecartType = Sqr(sc / (rangsObtenus.Count - 1))
         End If
     End If
+
+    If nbEquipesTotal > 0 Then tauxAffectation = nbEquipesAffectees / nbEquipesTotal
+    If nbEquipesAffectees > 0 Then
+        tauxTop1 = nbChoix1 / nbEquipesAffectees
+        tauxTop3 = nbTop3 / nbEquipesAffectees
+        frustration = nbRang4Plus / nbEquipesAffectees
+        satisfactionPonderee = (nbChoix1 + 0.7 * nbChoix2 + 0.4 * nbChoix3 + 0.1 * (nbEquipesAffectees - nbTop3)) / nbEquipesAffectees
+    End If
+    If nbVoeuxParEquipe > 1 Then
+        satisfactionNormalisee = (nbVoeuxParEquipe - rangMoyen) / (nbVoeuxParEquipe - 1)
+        equiteNormalisee = ecartType / (nbVoeuxParEquipe - 1)
+    ElseIf nbEquipesAffectees > 0 Then
+        satisfactionNormalisee = 1
+        equiteNormalisee = 0
+    End If
+    If projetsCapacites.Count > 0 Then
+        tauxProjetsMinAtteint = nbProjetsMinAtteint / projetsCapacites.Count
+        tauxProjetsVides = projetsVides.Count / projetsCapacites.Count
+    End If
+    If totalCapaciteMax > 0 Then
+        tauxRemplissageCapacite = nbEquipesAffectees / totalCapaciteMax
+        tensionCapacitaire = nbEquipesTotal / totalCapaciteMax
+        robustesseCapacitaire = (totalCapaciteMax - nbEquipesAffectees) / totalCapaciteMax
+    End If
+    If totalCapaciteMin > 0 Then ratioDeficitMin = totalDeficitMin / totalCapaciteMin
+
+    satisfactionNormalisee = WorksheetFunction.Max(0, WorksheetFunction.Min(1, satisfactionNormalisee))
+    satisfactionPonderee = WorksheetFunction.Max(0, WorksheetFunction.Min(1, satisfactionPonderee))
+    robustesseCapacitaire = WorksheetFunction.Max(0, WorksheetFunction.Min(1, robustesseCapacitaire))
 
     ' ---- Écriture du bilan ----
     wsBilan.Columns("A").ColumnWidth = 45: wsBilan.Columns("B").ColumnWidth = 15
@@ -912,6 +1404,9 @@ Sub BilanPerformanceAlgorithme()
     wsBilan.Cells(ligne, "A").Value = "Équipes ayant obtenu leur 1er vœu":   wsBilan.Cells(ligne, "B").Value = nbChoix1: ligne = ligne + 1
     wsBilan.Cells(ligne, "A").Value = "Équipes ayant obtenu leur 2ème vœu":  wsBilan.Cells(ligne, "B").Value = nbChoix2: ligne = ligne + 1
     wsBilan.Cells(ligne, "A").Value = "Équipes ayant obtenu leur 3ème vœu":  wsBilan.Cells(ligne, "B").Value = nbChoix3: ligne = ligne + 3
+    wsBilan.Cells(ligne, "A").Value = "Taux Top 1": wsBilan.Cells(ligne, "B").Value = Format(tauxTop1, "0.0%"): ligne = ligne + 1
+    wsBilan.Cells(ligne, "A").Value = "Taux Top 3": wsBilan.Cells(ligne, "B").Value = Format(tauxTop3, "0.0%"): ligne = ligne + 1
+    wsBilan.Cells(ligne, "A").Value = "Taux de frustration (rang >= 4)": wsBilan.Cells(ligne, "B").Value = Format(frustration, "0.0%"): ligne = ligne + 2
 
     wsBilan.Cells(ligne, "A").Value = "BILAN DU POINT DE VUE DES PROJETS"
     wsBilan.Range("A" & ligne & ":B" & ligne).Merge
@@ -923,6 +1418,15 @@ Sub BilanPerformanceAlgorithme()
         wsBilan.Cells(ligne, "A").Value = "Taux de projets satisfaits"
         wsBilan.Cells(ligne, "B").Value = Format(nbProjetsMinAtteint / projetsCapacites.Count, "0.0%")
     End If: ligne = ligne + 2
+    wsBilan.Cells(ligne, "A").Value = "Remplissage de la capacité max"
+    wsBilan.Cells(ligne, "B").Value = Format(tauxRemplissageCapacite, "0.0%")
+    ligne = ligne + 1
+    wsBilan.Cells(ligne, "A").Value = "Déficit cumulé vs minima"
+    wsBilan.Cells(ligne, "B").Value = totalDeficitMin
+    ligne = ligne + 1
+    wsBilan.Cells(ligne, "A").Value = "Ratio déficit minima"
+    wsBilan.Cells(ligne, "B").Value = Format(ratioDeficitMin, "0.0%")
+    ligne = ligne + 2
     wsBilan.Range("A1:B" & ligne).Borders.Weight = xlThin
 
     ligne = ligne + 1
@@ -959,8 +1463,33 @@ Sub BilanPerformanceAlgorithme()
         wsDetails.Cells(ld, "B").Value = "Aucun"
     End If
 
+    ' ---- Dashboard KPI métier avec seuils colorés ----
+    wsKPI.Cells.Clear
+    wsKPI.Range("A1:H1").Value = Array("KPI", "Valeur", "Unité", "Seuil Vert", "Seuil Jaune", "Seuil Orange", "Seuil Rouge", "Statut")
+    wsKPI.Range("A1:H1").Font.Bold = True
+    wsKPI.Range("A1:H1").Interior.Color = RGB(68, 114, 196)
+    wsKPI.Range("A1:H1").Font.Color = vbWhite
+
+    ligneKpi = 2
+    AddKpiRow wsKPI, ligneKpi, "Taux d'affectation des équipes", tauxAffectation, "0.0%", True, 0.98, 0.9, 0.75
+    AddKpiRow wsKPI, ligneKpi, "Satisfaction pondérée équipes", satisfactionPonderee, "0.0%", True, 0.85, 0.7, 0.55
+    AddKpiRow wsKPI, ligneKpi, "Satisfaction normalisée (0..1)", satisfactionNormalisee, "0.00", True, 0.8, 0.65, 0.5
+    AddKpiRow wsKPI, ligneKpi, "Équipes sur leur 1er choix", tauxTop1, "0.0%", True, 0.6, 0.45, 0.3
+    AddKpiRow wsKPI, ligneKpi, "Équipes dans le Top 3", tauxTop3, "0.0%", True, 0.9, 0.75, 0.6
+    AddKpiRow wsKPI, ligneKpi, "Frustration (rang >= 4)", frustration, "0.0%", False, 0.1, 0.2, 0.35
+    AddKpiRow wsKPI, ligneKpi, "Équité (écart-type normalisé)", equiteNormalisee, "0.00", False, 0.15, 0.25, 0.4
+    AddKpiRow wsKPI, ligneKpi, "Projets atteignant le minimum", tauxProjetsMinAtteint, "0.0%", True, 0.95, 0.8, 0.6
+    AddKpiRow wsKPI, ligneKpi, "Projets sans équipe", tauxProjetsVides, "0.0%", False, 0.05, 0.15, 0.3
+    AddKpiRow wsKPI, ligneKpi, "Remplissage capacité max", tauxRemplissageCapacite, "0.0%", True, 0.85, 0.7, 0.5
+    AddKpiRow wsKPI, ligneKpi, "Déficit relatif des minima", ratioDeficitMin, "0.0%", False, 0.02, 0.1, 0.25
+    AddKpiRow wsKPI, ligneKpi, "Tension capacitaire (équipes/capacité)", tensionCapacitaire, "0.00", False, 0.85, 0.95, 1
+    AddKpiRow wsKPI, ligneKpi, "Robustesse capacitaire (marge)", robustesseCapacitaire, "0.0%", True, 0.15, 0.08, 0.03
+
+    wsKPI.Columns("A:H").AutoFit
+    wsKPI.Range("A1:H" & ligneKpi - 1).Borders.Weight = xlThin
+
     Application.ScreenUpdating = True
-    MsgBox "Bilan de performance et listes de suivi générés.", vbInformation
+    MsgBox "Bilan de performance, listes de suivi et dashboard KPI générés.", vbInformation
 
 End Sub
 
@@ -1153,3 +1682,133 @@ Private Function CollectionToArray(coll As Collection) As Variant
     For i = 1 To coll.Count: arr(i) = coll(i): Next i
     CollectionToArray = arr
 End Function
+
+Private Function EnsureSheet(ByVal sheetName As String) As Worksheet
+    On Error Resume Next
+    Set EnsureSheet = ThisWorkbook.Sheets(sheetName)
+    On Error GoTo 0
+
+    If EnsureSheet Is Nothing Then
+        Set EnsureSheet = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
+        EnsureSheet.Name = sheetName
+    End If
+End Function
+
+Private Function CanonicalProjectName(ByVal rawName As String, ByVal projetsMap As Object) As String
+    Dim key As String
+    key = LCase(Trim(rawName))
+    If key = "" Then
+        CanonicalProjectName = ""
+    ElseIf projetsMap.Exists(key) Then
+        CanonicalProjectName = CStr(projetsMap(key))
+    Else
+        CanonicalProjectName = ""
+    End If
+End Function
+
+Private Function ReadLongOrDefault(ByVal rawValue As Variant, ByVal defaultValue As Long) As Long
+    If IsNumeric(rawValue) Then
+        ReadLongOrDefault = CLng(rawValue)
+    Else
+        ReadLongOrDefault = defaultValue
+    End If
+End Function
+
+Private Sub AddKpiRow(ByVal ws As Worksheet, ByRef rowIndex As Long, ByVal kpiName As String, ByVal kpiValue As Double, _
+                      ByVal numberFormat As String, ByVal higherIsBetter As Boolean, _
+                      ByVal seuilVert As Double, ByVal seuilJaune As Double, ByVal seuilOrange As Double)
+    Dim statut As String
+    Dim seuilFormat As String
+
+    statut = ComputeKpiStatus(kpiValue, higherIsBetter, seuilVert, seuilJaune, seuilOrange)
+    seuilFormat = IIf(InStr(1, numberFormat, "%") > 0, "0.0%", "0.00")
+
+    ws.Cells(rowIndex, 1).Value = kpiName
+    ws.Cells(rowIndex, 2).Value = kpiValue
+    ws.Cells(rowIndex, 2).NumberFormat = numberFormat
+
+    If higherIsBetter Then
+        ws.Cells(rowIndex, 4).Value = ">= " & Format(seuilVert, seuilFormat)
+        ws.Cells(rowIndex, 5).Value = ">= " & Format(seuilJaune, seuilFormat)
+        ws.Cells(rowIndex, 6).Value = ">= " & Format(seuilOrange, seuilFormat)
+        ws.Cells(rowIndex, 7).Value = "< " & Format(seuilOrange, seuilFormat)
+    Else
+        ws.Cells(rowIndex, 4).Value = "<= " & Format(seuilVert, seuilFormat)
+        ws.Cells(rowIndex, 5).Value = "<= " & Format(seuilJaune, seuilFormat)
+        ws.Cells(rowIndex, 6).Value = "<= " & Format(seuilOrange, seuilFormat)
+        ws.Cells(rowIndex, 7).Value = "> " & Format(seuilOrange, seuilFormat)
+    End If
+
+    ws.Cells(rowIndex, 8).Value = statut
+    ApplyKpiStatusStyle ws.Range("H" & rowIndex), statut
+    rowIndex = rowIndex + 1
+End Sub
+
+Private Function ComputeKpiStatus(ByVal value As Double, ByVal higherIsBetter As Boolean, _
+                                  ByVal seuilVert As Double, ByVal seuilJaune As Double, ByVal seuilOrange As Double) As String
+    If higherIsBetter Then
+        If value >= seuilVert Then
+            ComputeKpiStatus = "VERT"
+        ElseIf value >= seuilJaune Then
+            ComputeKpiStatus = "JAUNE"
+        ElseIf value >= seuilOrange Then
+            ComputeKpiStatus = "ORANGE"
+        Else
+            ComputeKpiStatus = "ROUGE"
+        End If
+    Else
+        If value <= seuilVert Then
+            ComputeKpiStatus = "VERT"
+        ElseIf value <= seuilJaune Then
+            ComputeKpiStatus = "JAUNE"
+        ElseIf value <= seuilOrange Then
+            ComputeKpiStatus = "ORANGE"
+        Else
+            ComputeKpiStatus = "ROUGE"
+        End If
+    End If
+End Function
+
+Private Sub ApplyKpiStatusStyle(ByVal target As Range, ByVal status As String)
+    Select Case UCase$(Trim$(status))
+        Case "VERT"
+            target.Interior.Color = RGB(198, 239, 206)
+            target.Font.Color = RGB(0, 97, 0)
+        Case "JAUNE"
+            target.Interior.Color = RGB(255, 242, 204)
+            target.Font.Color = RGB(127, 96, 0)
+        Case "ORANGE"
+            target.Interior.Color = RGB(248, 203, 173)
+            target.Font.Color = RGB(156, 87, 0)
+        Case Else
+            target.Interior.Color = RGB(255, 199, 206)
+            target.Font.Color = RGB(156, 0, 6)
+    End Select
+    target.Font.Bold = True
+End Sub
+
+Private Sub ImporterFeuilleReponsesDepuisFichier(ByVal filePath As String, ByVal wsDestination As Worksheet)
+    Dim wb As Workbook, wsSrc As Worksheet
+    Dim lastRow As Long, lastCol As Long
+
+    If Trim(filePath) = "" Then
+        Err.Raise vbObjectError + 1000, "ImporterFeuilleReponsesDepuisFichier", "Chemin de fichier vide."
+    End If
+    If Dir(filePath) = "" Then
+        Err.Raise vbObjectError + 1001, "ImporterFeuilleReponsesDepuisFichier", "Fichier introuvable : " & filePath
+    End If
+
+    Set wb = Workbooks.Open(Filename:=filePath, ReadOnly:=True)
+    Set wsSrc = wb.Sheets(1)
+
+    lastRow = wsSrc.Cells(wsSrc.Rows.Count, 1).End(xlUp).Row
+    lastCol = wsSrc.Cells(1, wsSrc.Columns.Count).End(xlToLeft).Column
+
+    wsDestination.Cells.Clear
+    If lastRow >= 1 And lastCol >= 1 Then
+        wsDestination.Range(wsDestination.Cells(1, 1), wsDestination.Cells(lastRow, lastCol)).Value = _
+            wsSrc.Range(wsSrc.Cells(1, 1), wsSrc.Cells(lastRow, lastCol)).Value
+    End If
+
+    wb.Close SaveChanges:=False
+End Sub

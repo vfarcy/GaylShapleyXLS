@@ -2,7 +2,7 @@
 
 Implémentation en **VBA Excel** de l'algorithme de Gale-Shapley pour affecter des **équipes d'élèves** à des projets de manière stable et optimale selon les préférences de chacun.
 
-> **État du projet ✅** : Code compilé et fonctionnel sur la branche main. 
+> **État du projet ✅** : Code compilé et fonctionnel sur la branche `dev`, avec dashboard KPI métier coloré.
 
 ---
 
@@ -108,6 +108,32 @@ Un score **faible** = équipe enthousiaste et homogène = bien classée par le p
 
 ## Description des macros
 
+### 0. `InitialiserFeuillesFormulaires`
+Prépare le classeur pour un mode de collecte **via formulaires en ligne** :
+- crée (ou réinitialise) `Reponses_Eleves`
+- crée (ou réinitialise) `Reponses_Commanditaires`
+- crée `Instructions_Formulaires` avec le mode d'emploi
+
+Les deux feuilles `Reponses_*` servent de destination de collage des exports CSV (Microsoft Forms, Google Forms, etc.).
+
+### 0 bis. `GenererDonneesDepuisFormulaires`
+Construit les feuilles d'entrée de l'algorithme à partir des réponses :
+- lit `Reponses_Eleves` (équipe, élève, choix de projets)
+- lit `Reponses_Commanditaires` (projet, capacités, tailles d'équipe)
+- alimente automatiquement `Préférences_Élèves`, `Équipes`, `Préférences_Équipes`, `Préférences_Projets`
+
+Le classement des équipes par projet reste calculé automatiquement avec la même logique que les données de test (moyenne + dispersion des rangs individuels).
+
+### 0 ter. `InitialiserConfigurationImportFormulaires`
+Prépare la feuille `Config_Import_Formulaires` qui contient les chemins des 2 fichiers Excel exportés depuis Microsoft Forms :
+- fichier réponses élèves
+- fichier réponses commanditaires
+
+### 0 quater. `ImporterReponsesFormulairesAutomatique`
+Importe automatiquement les réponses depuis ces fichiers Excel **sans copier-coller**, puis déclenche `GenererDonneesDepuisFormulaires`.
+
+Si les chemins ne sont pas renseignés (ou invalides), la macro ouvre un sélecteur de fichier pour les choisir.
+
 ### 1. `GenererDonneesDeTest`
 Génère l'ensemble des données de test en 4 étapes :
 1. Préférences individuelles aléatoires de chaque élève (mélange Fisher-Yates).
@@ -156,6 +182,16 @@ Génère deux feuilles de synthèse :
 - Projets n'ayant pas atteint leur minimum
 - Projets sans aucune équipe
 
+**`Dashboard_KPI_Metier`** (pilotage KPI avec seuils couleurs) :
+- Statut automatique **VERT / JAUNE / ORANGE / ROUGE** selon seuils
+- KPI équipes : satisfaction pondérée, satisfaction normalisée, top 1, top 3, frustration, équité
+- KPI projets : atteinte des minima, projets vides, remplissage capacité, déficit minima
+- KPI robustesse : tension capacitaire et marge de capacité
+
+Politique de seuils appliquée :
+- KPI où une valeur haute est meilleure (`higherIsBetter=True`) : `VERT >= seuil vert`, `JAUNE >= seuil jaune`, `ORANGE >= seuil orange`, sinon `ROUGE`.
+- KPI où une valeur basse est meilleure (`higherIsBetter=False`) : `VERT <= seuil vert`, `JAUNE <= seuil jaune`, `ORANGE <= seuil orange`, sinon `ROUGE`.
+
 ### 6. `RemplirAffectationsParProjet`
 Génère la feuille `Affectations_par_Projet` : vue détaillée avec, pour chaque projet, la liste des équipes affectées et la composition (membres) de chaque équipe.
 
@@ -183,10 +219,23 @@ Vérifie que `System.Collections.ArrayList` (.NET) est disponible sur la machine
 ## Flux d'exécution recommandé
 
 ```
+Mode A (simulation)
 GenererDonneesDeTest
-        │
-        ▼
-AffectationEquipesPasAPas   ←── (ou AffectationEquipesProjets pour plus de rapidité)
+   │
+   └──▶ AffectationEquipesPasAPas   (ou AffectationEquipesProjets)
+
+Mode B (formulaires en ligne)
+InitialiserFeuillesFormulaires
+   │
+   ├──▶ Option manuelle :
+   │      Coller les exports de formulaires dans Reponses_Eleves / Reponses_Commanditaires
+   │      puis GenererDonneesDepuisFormulaires
+   │
+   └──▶ Option automatique (recommandée) :
+          InitialiserConfigurationImportFormulaires
+          puis ImporterReponsesFormulairesAutomatique
+       │
+       └──▶ AffectationEquipesPasAPas   (ou AffectationEquipesProjets)
         │
         ├──▶ RemplirAffectationsParProjet   (vue détaillée projet → membres)
         │
@@ -195,7 +244,9 @@ AffectationEquipesPasAPas   ←── (ou AffectationEquipesProjets pour plus de
         └──▶ BilanPerformanceAlgorithme     (métriques globales)
 ```
 
-> **Important :** Toujours exécuter `GenererDonneesDeTest` **avant** les macros d'affectation. Les macros 2 à 6 lisent les feuilles produites par la macro 1.
+> **Important :** Avant les macros d'affectation, il faut alimenter les 4 feuilles d'entrée via **une** des deux voies :
+> - `GenererDonneesDeTest` (simulation)
+> - `GenererDonneesDepuisFormulaires` (données réelles)
 
 ---
 
@@ -206,6 +257,12 @@ AffectationEquipesPasAPas   ←── (ou AffectationEquipesProjets pour plus de
 | 1 | **Ex-aequo dans les classements** — deux équipes avec le même score sont départagées de façon déterministe par leur numéro | Comportement stable et reproductible |
 | 2 | **Score de Borda** — peut produire des égalités de score ; l'implémentation les résout en faveur de l'indice le plus bas | Cas rare, impact marginal |
 | 3 | **Équipes sans vœux compatibles** — si tous les projets sont incompatibles avec la taille d'une équipe, elle reste non affectée | Signalé dans `Details_Suivi` |
+
+---
+
+## À faire plus tard
+
+- Mode "temps réel" sans fichier intermédiaire : l'étape suivante serait une connexion Power Query/Graph/Power Automate.
 
 ---
 
@@ -268,6 +325,7 @@ Certaines versions d'Excel demandent une confirmation lors de l'ouverture d'un c
 | ✅ Décodage des noms de projets (Macro 1) | 2026-07 | Agrégation des préférences d'équipe compatible avec la nouvelle numérotation |
 | ✅ Correction de la déclaration dupliquée | 2026-07 | Erreur de compilation `projLookup` supprimée |
 | ✅ Documentation d'installation complète | 2026-07 | Section "Installation et intégration du code VBA" ajoutée |
+| ✅ Mode formulaires en ligne | 2026-07 | Import des réponses élèves/commanditaires vers les feuilles d'entrée de l'algorithme |
 
 ---
 
