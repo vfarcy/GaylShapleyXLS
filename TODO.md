@@ -1,13 +1,13 @@
-## TODO - Etat au 2026-07-30
+## TODO - État au 2026-07-30
 
-L'algorithme actuel produit une affectation stable au sens Gale-Shapley avec equipes proposantes.
-Les points ci-dessous sont alignes avec l'implementation VBA actuelle.
+L'algorithme actuel produit une affectation stable au sens Gale-Shapley avec équipes proposantes.
+Les points ci-dessous sont alignés avec l'implémentation VBA actuelle.
 
 ## Fait
 
-1. Classement projet avec departage deterministe des ex aequo
+1. Classement projet avec départage déterministe des ex æquo
 
-- Regle en place :
+- Règle en place :
 
 ```vb
 If (scores(k) < scores(eq)) Or (scores(k) = scores(eq) And k < eq) Then rang = rang + 1
@@ -17,58 +17,58 @@ If (scores(k) < scores(eq)) Or (scores(k) = scores(eq) And k < eq) Then rang = r
 
 Exemple correct de rangs :
 
-| Equipe | Score | Rang |
+| Équipe | Score | Rang |
 | ------ | ----- | ---- |
 | E1     | 1.50  | 1    |
 | E2     | 1.50  | 2    |
 | E3     | 2.00  | 3    |
 
-2. Classement des equipes par projet base sur preferences individuelles
+2. Classement des équipes par projet basé sur préférences individuelles
 
-- Score utilise :
+- Score utilisé :
 
 ```text
 Moyenne des rangs + Variance
 ```
 
-- Effet : une equipe avec interet plus partage est mieux classee.
+- Effet : une équipe avec intérêt plus partagé est mieux classée.
 
-3. Preferences d'equipe agregees avec score de Borda
+3. Préférences d'équipe agrégées avec score de Borda
 
-- Regle : 1er choix = N points, 2e = N-1, ..., dernier = 1.
-- Effet : preference collective plus robuste qu'un vote majoritaire simple.
+- Règle : 1er choix = N points, 2e = N-1, ..., dernier = 1.
+- Effet : préférence collective plus robuste qu'un vote majoritaire simple.
 
-## A faire
+## À faire
 
-4. Integrer MinEquipes dans l'algorithme (et pas seulement en controle post-affectation)
+4. Intégrer MinEquipes dans l'algorithme (et pas seulement en contrôle post-affectation)
 
-- Etat actuel : MinEquipes est verifie en sortie (statut et KPI), pas impose pendant l'affectation.
+- État actuel : MinEquipes est vérifié en sortie (statut et KPI), pas imposé pendant l'affectation.
 - Proposition : affectation en deux phases.
 	- Phase 1 : viser les minima des projets.
-	- Phase 2 : Gale-Shapley sur la capacite restante.
+	- Phase 2 : Gale-Shapley sur la capacité restante.
 
-5. Ajouter une amelioration locale post-affectation
+5. Ajouter une amélioration locale post-affectation
 
-- Objectif : tester des echanges d'equipes qui ameliorent la satisfaction sans violer min/max ni contraintes de taille.
+- Objectif : tester des échanges d'équipes qui améliorent la satisfaction sans violer min/max ni contraintes de taille.
 
 6. Ajouter un indicateur explicite de paires bloquantes
 
-- Objectif : certifier formellement la stabilite observee sur chaque run.
+- Objectif : certifier formellement la stabilité observée sur chaque run.
 - Sortie attendue : nombre de paires bloquantes (0 = stable).
 
 ## Optionnel (experimentation)
 
-7. Variante avec liste d'attente projet (au lieu du rejet immediat)
+7. Variante avec liste d'attente projet (au lieu du rejet immédiat)
 
-- Objectif : reduire les effets d'ordre dans certains jeux de donnees.
+- Objectif : réduire les effets d'ordre dans certains jeux de données.
 
-8. Etude d'equite proposeurs/recepteurs
+8. Étude d'équité proposeurs/récepteurs
 
-- Executer deux versions : equipes proposantes puis projets proposants.
-- Comparer les KPI et choisir une politique metier.
+- Exécuter deux versions : équipes proposantes puis projets proposants.
+- Comparer les KPI et choisir une politique métier.
 
-## Priorites recommandees
+## Priorités recommandées
 
-1. Integrer MinEquipes dans le moteur d'affectation.
-2. Mesurer les paires bloquantes apres chaque affectation.
-3. Ajouter l'amelioration locale.
+1. Intégrer MinEquipes dans le moteur d'affectation.
+2. Mesurer les paires bloquantes après chaque affectation.
+3. Ajouter l'amélioration locale.
