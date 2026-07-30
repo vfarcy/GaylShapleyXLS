@@ -1,6 +1,365 @@
 Option Explicit
 
 '================================================================================================
+' MACRO 0 : INITIALISER LES FEUILLES DE RÉPONSES FORMULAIRES
+' Feuilles créées/vidées :
+'   - Reponses_Eleves
+'   - Reponses_Commanditaires
+'   - Instructions_Formulaires
+'================================================================================================
+Sub InitialiserFeuillesFormulaires()
+    Dim wsEleves As Worksheet, wsCmd As Worksheet, wsInfo As Worksheet
+
+    Set wsEleves = EnsureSheet("Reponses_Eleves")
+    Set wsCmd = EnsureSheet("Reponses_Commanditaires")
+    Set wsInfo = EnsureSheet("Instructions_Formulaires")
+
+    Application.ScreenUpdating = False
+
+    wsEleves.Cells.Clear
+    wsEleves.Range("A1:H1").Value = Array("Horodatage", "Email", "Equipe", "Eleve", "Choix 1", "Choix 2", "Choix 3", "Choix 4")
+    wsEleves.Rows(1).Font.Bold = True
+    wsEleves.Columns.AutoFit
+
+    wsCmd.Cells.Clear
+    wsCmd.Range("A1:G1").Value = Array("Horodatage", "Email", "Projet", "MinEquipes", "MaxEquipes", "TailleMinEquipe", "TailleMaxEquipe")
+    wsCmd.Rows(1).Font.Bold = True
+    wsCmd.Columns.AutoFit
+
+    wsInfo.Cells.Clear
+    wsInfo.Cells(1, 1).Value = "Mode formulaires"
+    wsInfo.Cells(1, 1).Font.Bold = True
+    wsInfo.Cells(3, 1).Value = "1) Formulaire Eleves :"
+    wsInfo.Cells(4, 1).Value = "   Champs recommandes: Email, Equipe, Eleve, Choix 1..Choix N"
+    wsInfo.Cells(5, 1).Value = "   Exportez les reponses dans la feuille Reponses_Eleves (copier-coller ou CSV)."
+    wsInfo.Cells(7, 1).Value = "2) Formulaire Commanditaires :"
+    wsInfo.Cells(8, 1).Value = "   Champs recommandes: Email, Projet, MinEquipes, MaxEquipes, TailleMinEquipe, TailleMaxEquipe"
+    wsInfo.Cells(9, 1).Value = "   Exportez les reponses dans la feuille Reponses_Commanditaires."
+    wsInfo.Cells(11, 1).Value = "3) Lancez ensuite la macro GenererDonneesDepuisFormulaires."
+    wsInfo.Cells(13, 1).Value = "4) Puis executez AffectationEquipesPasAPas (ou AffectationEquipesProjets)."
+    wsInfo.Columns.AutoFit
+
+    Application.ScreenUpdating = True
+    MsgBox "Feuilles de formulaires initialisees. Vous pouvez coller les reponses exportees.", vbInformation
+End Sub
+
+
+'================================================================================================
+' MACRO 0 BIS : GÉNÉRER LES DONNÉES D'ENTRÉE DE L'ALGORITHME À PARTIR DES FORMULAIRES
+' Feuilles lues  : Reponses_Eleves, Reponses_Commanditaires
+' Feuilles écrites : Préférences_Élèves, Équipes, Préférences_Équipes, Préférences_Projets
+'================================================================================================
+Sub GenererDonneesDepuisFormulaires()
+    Dim wsRE As Worksheet, wsRC As Worksheet
+    Dim wsE As Worksheet, wsEq As Worksheet, wsPE As Worksheet, wsP As Worksheet
+    Dim i As Long, j As Long, k As Long, pos As Long
+    Dim lastRowRE As Long, lastColRE As Long, lastRowRC As Long
+    Dim nomProjet As String, nomEquipe As String, nomEleve As String, choix As String
+    Dim keyProj As String, canonProjet As String
+    Dim projetsOrdre As Collection, equipesOrdre As Collection, elevesOrdre As Collection
+    Dim projetsMap As Object, projetsMeta As Object
+    Dim equipesMembres As Object, prefsEleves As Object, rangsEleves As Object
+    Dim projectIndex As Object
+    Dim membres As Collection, prefs As Collection, prefsMembre As Collection
+    Dim usedProjets As Object, rangMap As Object
+    Dim nbProjets As Long, nbEquipes As Long, maxMembres As Long
+    Dim scoresBorda() As Double, ordreProjets() As Long, pointBorda As Long, pIdx As Long
+    Dim minEq As Long, maxEq As Long, tailleMin As Long, tailleMax As Long
+    Dim scoreTotal As Double, moyenneScore As Double, scoreDispersion As Double
+    Dim scores() As Double, rangs() As Long, rang As Long
+    Dim equipeNom As String, projetNom As String, membreNom As Variant
+    Dim eqIdx As Long, projIdx As Long
+    Dim meta As Variant
+
+    On Error Resume Next
+    Set wsRE = ThisWorkbook.Sheets("Reponses_Eleves")
+    Set wsRC = ThisWorkbook.Sheets("Reponses_Commanditaires")
+    On Error GoTo 0
+
+    If wsRE Is Nothing Or wsRC Is Nothing Then
+        MsgBox "Feuilles Reponses_Eleves/Reponses_Commanditaires introuvables. Lancez d'abord InitialiserFeuillesFormulaires.", vbCritical
+        Exit Sub
+    End If
+
+    lastRowRE = wsRE.Cells(wsRE.Rows.Count, "A").End(xlUp).Row
+    lastColRE = wsRE.Cells(1, wsRE.Columns.Count).End(xlToLeft).Column
+    lastRowRC = wsRC.Cells(wsRC.Rows.Count, "A").End(xlUp).Row
+
+    If lastRowRE < 2 Then
+        MsgBox "Aucune reponse eleve detectee.", vbCritical
+        Exit Sub
+    End If
+    If lastColRE < 5 Then
+        MsgBox "La feuille Reponses_Eleves doit contenir les colonnes Choix 1..Choix N (a partir de la colonne E).", vbCritical
+        Exit Sub
+    End If
+    If lastRowRC < 2 Then
+        MsgBox "Aucune reponse commanditaire detectee.", vbCritical
+        Exit Sub
+    End If
+
+    Application.ScreenUpdating = False
+
+    Set wsE = EnsureSheet("Préférences_Élèves")
+    Set wsEq = EnsureSheet("Équipes")
+    Set wsPE = EnsureSheet("Préférences_Équipes")
+    Set wsP = EnsureSheet("Préférences_Projets")
+
+    Set projetsOrdre = New Collection
+    Set equipesOrdre = New Collection
+    Set elevesOrdre = New Collection
+    Set projetsMap = CreateObject("Scripting.Dictionary")
+    Set projetsMeta = CreateObject("Scripting.Dictionary")
+    Set equipesMembres = CreateObject("Scripting.Dictionary")
+    Set prefsEleves = CreateObject("Scripting.Dictionary")
+    Set rangsEleves = CreateObject("Scripting.Dictionary")
+    Set projectIndex = CreateObject("Scripting.Dictionary")
+
+    ' --- 1) Lecture des projets depuis les reponses commanditaires ---
+    For i = 2 To lastRowRC
+        nomProjet = Trim(CStr(wsRC.Cells(i, 3).Value))
+        If nomProjet <> "" Then
+            keyProj = LCase(nomProjet)
+            If Not projetsMap.Exists(keyProj) Then
+                projetsMap.Add keyProj, nomProjet
+                projetsOrdre.Add nomProjet
+            End If
+
+            canonProjet = CStr(projetsMap(keyProj))
+            minEq = ReadLongOrDefault(wsRC.Cells(i, 4).Value, 1)
+            If minEq < 0 Then minEq = 0
+            maxEq = ReadLongOrDefault(wsRC.Cells(i, 5).Value, minEq)
+            If maxEq < minEq Then maxEq = minEq
+            tailleMin = ReadLongOrDefault(wsRC.Cells(i, 6).Value, 1)
+            If tailleMin < 1 Then tailleMin = 1
+            tailleMax = ReadLongOrDefault(wsRC.Cells(i, 7).Value, tailleMin)
+            If tailleMax < tailleMin Then tailleMax = tailleMin
+
+            projetsMeta(canonProjet) = Array(minEq, maxEq, tailleMin, tailleMax)
+        End If
+    Next i
+
+    nbProjets = projetsOrdre.Count
+    If nbProjets = 0 Then
+        Application.ScreenUpdating = True
+        MsgBox "Aucun projet valide detecte dans Reponses_Commanditaires.", vbCritical
+        Exit Sub
+    End If
+
+    For i = 1 To nbProjets
+        projectIndex(CStr(projetsOrdre(i))) = i
+    Next i
+
+    ' --- 2) Lecture des eleves, equipes et preferences individuelles ---
+    For i = 2 To lastRowRE
+        nomEquipe = Trim(CStr(wsRE.Cells(i, 3).Value))
+        nomEleve = Trim(CStr(wsRE.Cells(i, 4).Value))
+
+        If nomEquipe <> "" And nomEleve <> "" Then
+            If prefsEleves.Exists(nomEleve) Then
+                Application.ScreenUpdating = True
+                MsgBox "Nom d'eleve duplique detecte : " & nomEleve & ". Utilisez un identifiant unique par ligne.", vbCritical
+                Exit Sub
+            End If
+
+            If Not equipesMembres.Exists(nomEquipe) Then
+                Set membres = New Collection
+                equipesMembres.Add nomEquipe, membres
+                equipesOrdre.Add nomEquipe
+            End If
+            Set membres = equipesMembres(nomEquipe)
+            membres.Add nomEleve
+
+            Set prefs = New Collection
+            Set usedProjets = CreateObject("Scripting.Dictionary")
+
+            For j = 5 To lastColRE
+                choix = Trim(CStr(wsRE.Cells(i, j).Value))
+                canonProjet = CanonicalProjectName(choix, projetsMap)
+                If canonProjet <> "" Then
+                    If Not usedProjets.Exists(canonProjet) Then
+                        usedProjets.Add canonProjet, True
+                        prefs.Add canonProjet
+                    End If
+                End If
+            Next j
+
+            ' Complete avec les projets non cites pour garder une preference complete
+            For j = 1 To nbProjets
+                projetNom = CStr(projetsOrdre(j))
+                If Not usedProjets.Exists(projetNom) Then prefs.Add projetNom
+            Next j
+
+            prefsEleves.Add nomEleve, prefs
+            elevesOrdre.Add nomEleve
+
+            Set rangMap = CreateObject("Scripting.Dictionary")
+            For j = 1 To prefs.Count
+                rangMap(CStr(prefs(j))) = j
+            Next j
+            rangsEleves.Add nomEleve, rangMap
+        End If
+    Next i
+
+    nbEquipes = equipesOrdre.Count
+    If nbEquipes = 0 Then
+        Application.ScreenUpdating = True
+        MsgBox "Aucune equipe valide detectee dans Reponses_Eleves.", vbCritical
+        Exit Sub
+    End If
+
+    ' --- 3) Ecriture Préférences_Élèves ---
+    wsE.Cells.Clear
+    wsE.Cells(1, 1).Value = "Élève"
+    For i = 1 To nbProjets
+        wsE.Cells(1, 1 + i).Value = "Choix " & i
+    Next i
+    wsE.Rows(1).Font.Bold = True
+
+    For i = 1 To elevesOrdre.Count
+        nomEleve = CStr(elevesOrdre(i))
+        wsE.Cells(i + 1, 1).Value = nomEleve
+        Set prefs = prefsEleves(nomEleve)
+        For j = 1 To nbProjets
+            wsE.Cells(i + 1, 1 + j).Value = CStr(prefs(j))
+        Next j
+    Next i
+    wsE.Columns.AutoFit
+
+    ' --- 4) Ecriture Équipes ---
+    wsEq.Cells.Clear
+    wsEq.Cells(1, 1).Value = "Équipe"
+    wsEq.Rows(1).Font.Bold = True
+
+    maxMembres = 0
+    For i = 1 To nbEquipes
+        Set membres = equipesMembres(CStr(equipesOrdre(i)))
+        If membres.Count > maxMembres Then maxMembres = membres.Count
+    Next i
+    For i = 1 To maxMembres
+        wsEq.Cells(1, 1 + i).Value = "Membre " & i
+    Next i
+
+    For i = 1 To nbEquipes
+        equipeNom = CStr(equipesOrdre(i))
+        wsEq.Cells(i + 1, 1).Value = equipeNom
+        Set membres = equipesMembres(equipeNom)
+        For j = 1 To membres.Count
+            wsEq.Cells(i + 1, 1 + j).Value = CStr(membres(j))
+        Next j
+    Next i
+    wsEq.Columns.AutoFit
+
+    ' --- 5) Ecriture Préférences_Équipes (Borda) ---
+    wsPE.Cells.Clear
+    wsPE.Cells(1, 1).Value = "Équipe"
+    For i = 1 To nbProjets
+        wsPE.Cells(1, 1 + i).Value = "Choix " & i
+    Next i
+    wsPE.Rows(1).Font.Bold = True
+
+    For eqIdx = 1 To nbEquipes
+        equipeNom = CStr(equipesOrdre(eqIdx))
+        wsPE.Cells(eqIdx + 1, 1).Value = equipeNom
+        ReDim scoresBorda(1 To nbProjets)
+
+        Set membres = equipesMembres(equipeNom)
+        For Each membreNom In membres
+            Set prefsMembre = prefsEleves(CStr(membreNom))
+            For pos = 1 To nbProjets
+                projetNom = CStr(prefsMembre(pos))
+                pIdx = CLng(projectIndex(projetNom))
+                pointBorda = nbProjets - pos + 1
+                scoresBorda(pIdx) = scoresBorda(pIdx) + pointBorda
+            Next pos
+        Next membreNom
+
+        ReDim ordreProjets(1 To nbProjets)
+        For i = 1 To nbProjets
+            ordreProjets(i) = i
+        Next i
+
+        For i = 1 To nbProjets - 1
+            For j = i + 1 To nbProjets
+                If (scoresBorda(ordreProjets(j)) > scoresBorda(ordreProjets(i))) Or _
+                   ((scoresBorda(ordreProjets(j)) = scoresBorda(ordreProjets(i))) And (ordreProjets(j) < ordreProjets(i))) Then
+                    k = ordreProjets(i)
+                    ordreProjets(i) = ordreProjets(j)
+                    ordreProjets(j) = k
+                End If
+            Next j
+        Next i
+
+        For i = 1 To nbProjets
+            wsPE.Cells(eqIdx + 1, 1 + i).Value = CStr(projetsOrdre(ordreProjets(i)))
+        Next i
+    Next eqIdx
+    wsPE.Columns.AutoFit
+
+    ' --- 6) Ecriture Préférences_Projets ---
+    wsP.Cells.Clear
+    wsP.Cells(1, 1).Value = "Projet"
+    wsP.Cells(1, 2).Value = "MinEquipes"
+    wsP.Cells(1, 3).Value = "MaxEquipes"
+    wsP.Cells(1, 4).Value = "TailleMinEquipe"
+    wsP.Cells(1, 5).Value = "TailleMaxEquipe"
+    For eqIdx = 1 To nbEquipes
+        wsP.Cells(1, 5 + eqIdx).Value = CStr(equipesOrdre(eqIdx))
+    Next eqIdx
+    wsP.Rows(1).Font.Bold = True
+
+    For projIdx = 1 To nbProjets
+        projetNom = CStr(projetsOrdre(projIdx))
+        meta = projetsMeta(projetNom)
+        wsP.Cells(projIdx + 1, 1).Value = projetNom
+        wsP.Cells(projIdx + 1, 2).Value = CLng(meta(0))
+        wsP.Cells(projIdx + 1, 3).Value = CLng(meta(1))
+        wsP.Cells(projIdx + 1, 4).Value = CLng(meta(2))
+        wsP.Cells(projIdx + 1, 5).Value = CLng(meta(3))
+
+        ReDim scores(1 To nbEquipes)
+        For eqIdx = 1 To nbEquipes
+            equipeNom = CStr(equipesOrdre(eqIdx))
+            Set membres = equipesMembres(equipeNom)
+            scoreTotal = 0
+            scoreDispersion = 0
+
+            For Each membreNom In membres
+                Set rangMap = rangsEleves(CStr(membreNom))
+                scoreTotal = scoreTotal + CDbl(rangMap(projetNom))
+            Next membreNom
+
+            moyenneScore = scoreTotal / membres.Count
+
+            For Each membreNom In membres
+                Set rangMap = rangsEleves(CStr(membreNom))
+                scoreDispersion = scoreDispersion + (CDbl(rangMap(projetNom)) - moyenneScore) ^ 2
+            Next membreNom
+
+            scoreDispersion = scoreDispersion / membres.Count
+            scores(eqIdx) = moyenneScore + scoreDispersion
+        Next eqIdx
+
+        ReDim rangs(1 To nbEquipes)
+        For eqIdx = 1 To nbEquipes
+            rang = 1
+            For k = 1 To nbEquipes
+                If (scores(k) < scores(eqIdx)) Or (scores(k) = scores(eqIdx) And k < eqIdx) Then rang = rang + 1
+            Next k
+            rangs(eqIdx) = rang
+        Next eqIdx
+
+        For eqIdx = 1 To nbEquipes
+            wsP.Cells(projIdx + 1, 5 + eqIdx).Value = rangs(eqIdx)
+        Next eqIdx
+    Next projIdx
+    wsP.Columns.AutoFit
+
+    Application.ScreenUpdating = True
+    MsgBox "Donnees importees depuis formulaires : " & elevesOrdre.Count & " eleves, " & nbEquipes & " equipes, " & nbProjets & " projets.", vbInformation
+End Sub
+
+'================================================================================================
 ' MACRO 1 : GÉNÉRATION DES DONNÉES DE TEST
 ' Feuilles générées :
 '   - Préférences_Élèves  : préférences individuelles de chaque élève
@@ -1152,4 +1511,35 @@ Private Function CollectionToArray(coll As Collection) As Variant
     ReDim arr(1 To coll.Count)
     For i = 1 To coll.Count: arr(i) = coll(i): Next i
     CollectionToArray = arr
+End Function
+
+Private Function EnsureSheet(ByVal sheetName As String) As Worksheet
+    On Error Resume Next
+    Set EnsureSheet = ThisWorkbook.Sheets(sheetName)
+    On Error GoTo 0
+
+    If EnsureSheet Is Nothing Then
+        Set EnsureSheet = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
+        EnsureSheet.Name = sheetName
+    End If
+End Function
+
+Private Function CanonicalProjectName(ByVal rawName As String, ByVal projetsMap As Object) As String
+    Dim key As String
+    key = LCase(Trim(rawName))
+    If key = "" Then
+        CanonicalProjectName = ""
+    ElseIf projetsMap.Exists(key) Then
+        CanonicalProjectName = CStr(projetsMap(key))
+    Else
+        CanonicalProjectName = ""
+    End If
+End Function
+
+Private Function ReadLongOrDefault(ByVal rawValue As Variant, ByVal defaultValue As Long) As Long
+    If IsNumeric(rawValue) Then
+        ReadLongOrDefault = CLng(rawValue)
+    Else
+        ReadLongOrDefault = defaultValue
+    End If
 End Function
