@@ -45,6 +45,75 @@ End Sub
 
 
 '================================================================================================
+' MACRO 0 TER : CONFIGURATION DE L'IMPORT AUTOMATIQUE DES FICHIERS FORMS
+' Feuille créée :
+'   - Config_Import_Formulaires
+'================================================================================================
+Sub InitialiserConfigurationImportFormulaires()
+    Dim wsCfg As Worksheet
+
+    Set wsCfg = EnsureSheet("Config_Import_Formulaires")
+
+    wsCfg.Cells.Clear
+    wsCfg.Range("A1:B1").Value = Array("Source", "CheminFichierExcel")
+    wsCfg.Range("A2:B2").Value = Array("Eleves", "")
+    wsCfg.Range("A3:B3").Value = Array("Commanditaires", "")
+    wsCfg.Rows(1).Font.Bold = True
+
+    wsCfg.Cells(5, 1).Value = "Mode d'emploi"
+    wsCfg.Cells(5, 1).Font.Bold = True
+    wsCfg.Cells(6, 1).Value = "1) Ouvrir chaque formulaire Microsoft Forms puis 'Ouvrir dans Excel'."
+    wsCfg.Cells(7, 1).Value = "2) Enregistrer les deux fichiers Excel (eleves et commanditaires)."
+    wsCfg.Cells(8, 1).Value = "3) Renseigner leurs chemins en colonne B (ou laisser vide : la macro les demandera)."
+    wsCfg.Cells(9, 1).Value = "4) Lancer ImporterReponsesFormulairesAutomatique."
+    wsCfg.Columns("A:B").AutoFit
+
+    MsgBox "Feuille de configuration d'import automatique initialisee.", vbInformation
+End Sub
+
+
+'================================================================================================
+' MACRO 0 QUATER : IMPORT AUTOMATIQUE DES RÉPONSES FORMS (SANS COPIER-COLLER)
+' Feuilles lues    : Config_Import_Formulaires + 2 fichiers Excel exports Forms
+' Feuilles écrites : Reponses_Eleves, Reponses_Commanditaires puis feuilles d'entrée algorithme
+'================================================================================================
+Sub ImporterReponsesFormulairesAutomatique()
+    Dim wsCfg As Worksheet, wsRE As Worksheet, wsRC As Worksheet
+    Dim pathEleves As String, pathCmd As String
+    Dim pick As Variant
+
+    Set wsCfg = EnsureSheet("Config_Import_Formulaires")
+    Set wsRE = EnsureSheet("Reponses_Eleves")
+    Set wsRC = EnsureSheet("Reponses_Commanditaires")
+
+    pathEleves = Trim(CStr(wsCfg.Cells(2, 2).Value))
+    pathCmd = Trim(CStr(wsCfg.Cells(3, 2).Value))
+
+    If pathEleves = "" Or Dir(pathEleves) = "" Then
+        pick = Application.GetOpenFilename("Fichiers Excel (*.xlsx;*.xlsm),*.xlsx;*.xlsm", , "Selectionner le fichier de reponses Eleves")
+        If VarType(pick) = vbBoolean Then Exit Sub
+        pathEleves = CStr(pick)
+        wsCfg.Cells(2, 2).Value = pathEleves
+    End If
+
+    If pathCmd = "" Or Dir(pathCmd) = "" Then
+        pick = Application.GetOpenFilename("Fichiers Excel (*.xlsx;*.xlsm),*.xlsx;*.xlsm", , "Selectionner le fichier de reponses Commanditaires")
+        If VarType(pick) = vbBoolean Then Exit Sub
+        pathCmd = CStr(pick)
+        wsCfg.Cells(3, 2).Value = pathCmd
+    End If
+
+    Application.ScreenUpdating = False
+    ImporterFeuilleReponsesDepuisFichier pathEleves, wsRE
+    ImporterFeuilleReponsesDepuisFichier pathCmd, wsRC
+    Application.ScreenUpdating = True
+
+    ' Reutilise le pipeline deja en place pour produire les feuilles d'entree.
+    GenererDonneesDepuisFormulaires
+End Sub
+
+
+'================================================================================================
 ' MACRO 0 BIS : GÉNÉRER LES DONNÉES D'ENTRÉE DE L'ALGORITHME À PARTIR DES FORMULAIRES
 ' Feuilles lues  : Reponses_Eleves, Reponses_Commanditaires
 ' Feuilles écrites : Préférences_Élèves, Équipes, Préférences_Équipes, Préférences_Projets
@@ -1543,3 +1612,29 @@ Private Function ReadLongOrDefault(ByVal rawValue As Variant, ByVal defaultValue
         ReadLongOrDefault = defaultValue
     End If
 End Function
+
+Private Sub ImporterFeuilleReponsesDepuisFichier(ByVal filePath As String, ByVal wsDestination As Worksheet)
+    Dim wb As Workbook, wsSrc As Worksheet
+    Dim lastRow As Long, lastCol As Long
+
+    If Trim(filePath) = "" Then
+        Err.Raise vbObjectError + 1000, "ImporterFeuilleReponsesDepuisFichier", "Chemin de fichier vide."
+    End If
+    If Dir(filePath) = "" Then
+        Err.Raise vbObjectError + 1001, "ImporterFeuilleReponsesDepuisFichier", "Fichier introuvable : " & filePath
+    End If
+
+    Set wb = Workbooks.Open(Filename:=filePath, ReadOnly:=True)
+    Set wsSrc = wb.Sheets(1)
+
+    lastRow = wsSrc.Cells(wsSrc.Rows.Count, 1).End(xlUp).Row
+    lastCol = wsSrc.Cells(1, wsSrc.Columns.Count).End(xlToLeft).Column
+
+    wsDestination.Cells.Clear
+    If lastRow >= 1 And lastCol >= 1 Then
+        wsDestination.Range(wsDestination.Cells(1, 1), wsDestination.Cells(lastRow, lastCol)).Value = _
+            wsSrc.Range(wsSrc.Cells(1, 1), wsSrc.Cells(lastRow, lastCol)).Value
+    End If
+
+    wb.Close SaveChanges:=False
+End Sub

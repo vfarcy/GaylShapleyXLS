@@ -124,6 +124,16 @@ Construit les feuilles d'entrée de l'algorithme à partir des réponses :
 
 Le classement des équipes par projet reste calculé automatiquement avec la même logique que les données de test (moyenne + dispersion des rangs individuels).
 
+### 0 ter. `InitialiserConfigurationImportFormulaires`
+Prépare la feuille `Config_Import_Formulaires` qui contient les chemins des 2 fichiers Excel exportés depuis Microsoft Forms :
+- fichier réponses élèves
+- fichier réponses commanditaires
+
+### 0 quater. `ImporterReponsesFormulairesAutomatique`
+Importe automatiquement les réponses depuis ces fichiers Excel **sans copier-coller**, puis déclenche `GenererDonneesDepuisFormulaires`.
+
+Si les chemins ne sont pas renseignés (ou invalides), la macro ouvre un sélecteur de fichier pour les choisir.
+
 ### 1. `GenererDonneesDeTest`
 Génère l'ensemble des données de test en 4 étapes :
 1. Préférences individuelles aléatoires de chaque élève (mélange Fisher-Yates).
@@ -207,9 +217,13 @@ GenererDonneesDeTest
 Mode B (formulaires en ligne)
 InitialiserFeuillesFormulaires
    │
-   ├──▶ Coller les exports de formulaires dans Reponses_Eleves / Reponses_Commanditaires
+   ├──▶ Option manuelle :
+   │      Coller les exports de formulaires dans Reponses_Eleves / Reponses_Commanditaires
+   │      puis GenererDonneesDepuisFormulaires
    │
-   └──▶ GenererDonneesDepuisFormulaires
+   └──▶ Option automatique (recommandée) :
+          InitialiserConfigurationImportFormulaires
+          puis ImporterReponsesFormulairesAutomatique
        │
        └──▶ AffectationEquipesPasAPas   (ou AffectationEquipesProjets)
         │
@@ -233,6 +247,12 @@ InitialiserFeuillesFormulaires
 | 1 | **Ex-aequo dans les classements** — deux équipes avec le même score sont départagées de façon déterministe par leur numéro | Comportement stable et reproductible |
 | 2 | **Score de Borda** — peut produire des égalités de score ; l'implémentation les résout en faveur de l'indice le plus bas | Cas rare, impact marginal |
 | 3 | **Équipes sans vœux compatibles** — si tous les projets sont incompatibles avec la taille d'une équipe, elle reste non affectée | Signalé dans `Details_Suivi` |
+
+---
+
+## À faire plus tard
+
+- Mode "temps réel" sans fichier intermédiaire : l'étape suivante serait une connexion Power Query/Graph/Power Automate.
 
 ---
 
