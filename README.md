@@ -77,7 +77,7 @@ Un score **faible** = équipe enthousiaste et homogène = bien classée par le p
 
 ### Feuilles alimentées automatiquement
 
-| Feuille | Rôle | Créée/alimentée par |
+| Feuille | Rôle | Alimentée par |
 |---|---|---|
 | `Préférences_Élèves` | Listes de vœux ordonnés de chaque élève | `GenererDonneesDeTest` |
 | `Équipes` | Composition des équipes (membres) | `GenererDonneesDeTest` |
@@ -88,9 +88,20 @@ Un score **faible** = équipe enthousiaste et homogène = bien classée par le p
 | `Rapport_Satisfaction` | Rang du vœu obtenu par chaque équipe + statistiques | `CreerRapportSatisfaction` |
 | `Bilan_Performance` | Métriques globales de l'affectation | `BilanPerformanceAlgorithme` |
 | `Details_Suivi` | Listes équipes sans projet, projets sous-minimum | `BilanPerformanceAlgorithme` |
+| `Dashboard_KPI_Metier` | Pilotage KPI métier avec statuts couleurs | `BilanPerformanceAlgorithme` |
 | `Affectations_par_Projet` | Vue détaillée projet → équipes → membres | `RemplirAffectationsParProjet` |
 
-> Les feuilles manquantes sont **créées automatiquement** à la première exécution de chaque macro.
+> **Comportement réel des créations de feuilles (code actuel)**
+> - **Créées automatiquement si absentes** :
+>   - `Préférences_Élèves`, `Équipes`, `Préférences_Équipes`, `Préférences_Projets` (Macro 1)
+>   - `Reponses_Eleves`, `Reponses_Commanditaires`, `Instructions_Formulaires`, `Config_Import_Formulaires` (Macros 0, 0 ter)
+>   - `Details_Suivi` et `Dashboard_KPI_Metier` (Macro 5)
+>   - `Affectations_par_Projet` (Macro 6)
+> - **Doivent déjà exister dans le classeur** (sinon la macro s'arrête avec "feuilles manquantes") :
+>   - `Résultats` (Macro 2)
+>   - `Résultats` et `Log_Affectation` (Macro 3)
+>   - `Résultats` et `Rapport_Satisfaction` (Macro 4)
+>   - `Résultats` et `Bilan_Performance` (Macro 5)
 
 ### Structure de `Préférences_Projets`
 
@@ -148,12 +159,16 @@ Paramètres saisis via `InputBox` : nombre d'élèves, nombre de projets, taille
 ### 2. `AffectationEquipesProjets`
 Exécute l'algorithme de Gale-Shapley complet en une passe, sans journalisation. Plus rapide que la version pas à pas.
 
+Pré-requis : la feuille `Résultats` doit exister dans le classeur.
+
 Écrit les résultats dans `Résultats` :
 - Équipes affectées à chaque projet
 - Statut capacité (OK / MINIMUM NON ATTEINT)
 
 ### 3. `AffectationEquipesPasAPas`
 Même algorithme avec journalisation détaillée de chaque étape dans `Log_Affectation` :
+
+Pré-requis : les feuilles `Résultats` et `Log_Affectation` doivent exister.
 - Action de l'équipe (proposition)
 - Décision du projet (acceptation provisoire, éviction, rejet)
 - État courant du projet
@@ -164,12 +179,18 @@ Produit les mêmes résultats que la macro 2 dans `Résultats`.
 ### 4. `CreerRapportSatisfaction`
 Pour chaque équipe affectée, calcule le **rang** du projet obtenu dans sa liste de vœux agrégée. Produit en pied de tableau :
 
+Pré-requis : les feuilles `Résultats` et `Rapport_Satisfaction` doivent exister.
+
 $$\bar{x} = \frac{1}{n}\sum_{i=1}^{n} r_i \qquad s = \sqrt{\frac{\sum_{i=1}^{n}(r_i - \bar{x})^2}{n-1}}$$
 
 Un rang moyen proche de 1 indique une excellente satisfaction globale. L'écart-type mesure l'équité de la distribution.
 
 ### 5. `BilanPerformanceAlgorithme`
 Génère deux feuilles de synthèse :
+
+Pré-requis : les feuilles `Résultats` et `Bilan_Performance` doivent exister.
+
+Création automatique dans cette macro : `Details_Suivi` et `Dashboard_KPI_Metier` (si absentes).
 
 **`Bilan_Performance`** (indicateurs clés) :
 - Taux d'affectation des équipes
