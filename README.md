@@ -213,6 +213,98 @@ Politique de seuils appliquée :
 - KPI où une valeur haute est meilleure (`higherIsBetter=True`) : `VERT >= seuil vert`, `JAUNE >= seuil jaune`, `ORANGE >= seuil orange`, sinon `ROUGE`.
 - KPI où une valeur basse est meilleure (`higherIsBetter=False`) : `VERT <= seuil vert`, `JAUNE <= seuil jaune`, `ORANGE <= seuil orange`, sinon `ROUGE`.
 
+#### Détail de tous les KPI métier du dashboard
+
+Notations :
+- $N$ = nombre total d'équipes
+- $A$ = nombre d'équipes affectées
+- $P$ = nombre total de projets
+- $C_{max}$ = capacité maximale totale (somme des `MaxEquipes`)
+- $C_{min}$ = capacité minimale totale (somme des `MinEquipes`)
+- $r_i$ = rang obtenu par l'équipe $i$ (1 = meilleur)
+- $V$ = nombre de vœux par équipe
+
+1. **Taux d'affectation des équipes**
+   - Formule : $A/N$
+   - Lecture métier : part des équipes qui obtiennent un projet.
+   - Interprétation : plus c'est élevé, mieux c'est.
+
+2. **Satisfaction pondérée équipes**
+   - Formule :
+     $$\frac{1.0\times n_{rang1} + 0.7\times n_{rang2} + 0.4\times n_{rang3} + 0.1\times n_{rang\ge4}}{A}$$
+   - Lecture métier : score global de satisfaction qui valorise fortement les 1ers choix.
+   - Interprétation : score entre 0 et 1, plus élevé = meilleure satisfaction globale.
+
+3. **Satisfaction normalisée (0..1)**
+   - Formule : $\dfrac{V - \bar r}{V - 1}$ avec $\bar r = \dfrac{1}{A}\sum r_i$
+   - Lecture métier : transforme le rang moyen en score comparable entre contextes.
+   - Interprétation : 1 = excellent (rangs proches de 1), 0 = très faible.
+
+4. **Équipes sur leur 1er choix (Top 1)**
+   - Formule : $n_{rang1}/A$
+   - Lecture métier : proportion d'équipes ayant obtenu leur vœu n°1.
+   - Interprétation : plus c'est élevé, mieux c'est.
+
+5. **Équipes dans le Top 3**
+   - Formule : $n_{rang\le3}/A$
+   - Lecture métier : proportion d'équipes dont le projet est dans les 3 premiers choix.
+   - Interprétation : plus c'est élevé, mieux c'est.
+
+6. **Frustration (rang >= 4)**
+   - Formule : $n_{rang\ge4}/A$
+   - Lecture métier : part des équipes envoyées au-delà de leur 3e choix.
+   - Interprétation : plus c'est faible, mieux c'est.
+
+7. **Équité (écart-type normalisé)**
+   - Formule : $\sigma_r/(V-1)$ où $\sigma_r$ est l'écart-type des rangs obtenus.
+   - Lecture métier : mesure la dispersion des satisfactions entre équipes.
+   - Interprétation : plus c'est faible, plus la répartition est équitable.
+
+8. **Projets atteignant le minimum**
+   - Formule : $n_{projets\_min\_atteint}/P$
+   - Lecture métier : part des projets respectant leur contrainte minimale d'équipes.
+   - Interprétation : plus c'est élevé, mieux c'est.
+
+9. **Projets sans équipe**
+   - Formule : $n_{projets\_vides}/P$
+   - Lecture métier : proportion de projets totalement non servis.
+   - Interprétation : plus c'est faible, mieux c'est.
+
+10. **Remplissage capacité max**
+    - Formule : $A/C_{max}$
+    - Lecture métier : niveau d'utilisation du volume de capacité disponible.
+    - Interprétation : plus c'est élevé, mieux c'est (dans les limites de qualité d'affectation).
+
+11. **Déficit relatif des minima**
+    - Formule : $\dfrac{\sum_{projets}\max(0, MinEquipes - equipesAffectees)}{C_{min}}$
+    - Lecture métier : déficit total de remplissage par rapport aux minima attendus.
+    - Interprétation : plus c'est faible, mieux c'est.
+
+12. **Tension capacitaire (équipes/capacité)**
+    - Formule : $N/C_{max}$
+    - Lecture métier : pression structurelle sur les capacités.
+    - Interprétation : plus c'est faible, mieux c'est. Une valeur proche de 1 signale un système tendu ; au-dessus de 1, la capacité théorique est insuffisante.
+
+13. **Robustesse capacitaire (marge)**
+    - Formule : $(C_{max} - A)/C_{max}$
+    - Lecture métier : marge de sécurité restante après affectation.
+    - Interprétation : plus c'est élevé, plus le système peut absorber des aléas.
+
+Seuils actuellement codés (macro `BilanPerformanceAlgorithme`) :
+- Taux d'affectation des équipes : vert 98%, jaune 90%, orange 75%
+- Satisfaction pondérée équipes : vert 85%, jaune 70%, orange 55%
+- Satisfaction normalisée (0..1) : vert 0.80, jaune 0.65, orange 0.50
+- Équipes sur leur 1er choix : vert 60%, jaune 45%, orange 30%
+- Équipes dans le Top 3 : vert 90%, jaune 75%, orange 60%
+- Frustration (rang >= 4) : vert 10%, jaune 20%, orange 35%
+- Équité (écart-type normalisé) : vert 0.15, jaune 0.25, orange 0.40
+- Projets atteignant le minimum : vert 95%, jaune 80%, orange 60%
+- Projets sans équipe : vert 5%, jaune 15%, orange 30%
+- Remplissage capacité max : vert 85%, jaune 70%, orange 50%
+- Déficit relatif des minima : vert 2%, jaune 10%, orange 25%
+- Tension capacitaire (équipes/capacité) : vert 0.85, jaune 0.95, orange 1.00
+- Robustesse capacitaire (marge) : vert 15%, jaune 8%, orange 3%
+
 ### 6. `RemplirAffectationsParProjet`
 Génère la feuille `Affectations_par_Projet` : vue détaillée avec, pour chaque projet, la liste des équipes affectées et la composition (membres) de chaque équipe.
 
