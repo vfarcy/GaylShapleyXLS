@@ -1200,11 +1200,12 @@ End Sub
 Sub BilanPerformanceAlgorithme()
 
     Dim wsR As Worksheet, wsPE As Worksheet, wsP As Worksheet
-    Dim wsBilan As Worksheet, wsDetails As Worksheet
+    Dim wsBilan As Worksheet, wsDetails As Worksheet, wsKPI As Worksheet
     Dim i As Long, j As Long, eq As Variant, projet As Variant
     Dim nomP As String, listeStr As String, arr As Variant, nomEq As String
     Dim affectationsEquipe As Object, affectationsProjet As Object
     Dim prefsEquipes As Object, projetsCapacites As Object
+    Dim projetsMin As Object, projetsMax As Object
     Dim nbEquipesTotal As Long, nbEquipesAffectees As Long
     Dim nbChoix1 As Long, nbChoix2 As Long, nbChoix3 As Long
     Dim rangsObtenus As Collection, equipesSansProjet As Collection
@@ -1212,7 +1213,15 @@ Sub BilanPerformanceAlgorithme()
     Dim somme As Double, sc As Double, ri As Variant
     Dim projetsSousMinimum As Collection, projetsVides As Collection
     Dim nbProjetsMinAtteint As Long, rangMoyen As Double, ecartType As Double
-    Dim ligne As Long, ld As Long
+    Dim ligne As Long, ld As Long, ligneKpi As Long
+    Dim nbVoeuxParEquipe As Long, nbTop3 As Long, nbRang4Plus As Long
+    Dim totalCapaciteMin As Long, totalCapaciteMax As Long, totalDeficitMin As Long
+    Dim tauxAffectation As Double, tauxTop1 As Double, tauxTop3 As Double, frustration As Double
+    Dim satisfactionPonderee As Double, satisfactionNormalisee As Double, equiteNormalisee As Double
+    Dim tauxProjetsMinAtteint As Double, tauxProjetsVides As Double
+    Dim tauxRemplissageCapacite As Double, tensionCapacitaire As Double, robustesseCapacitaire As Double
+    Dim ratioDeficitMin As Double
+    Dim minEq As Long, maxEq As Long
 
     On Error Resume Next
     Set wsR       = ThisWorkbook.Sheets("Résultats")
@@ -1220,9 +1229,14 @@ Sub BilanPerformanceAlgorithme()
     Set wsP       = ThisWorkbook.Sheets("Préférences_Projets")
     Set wsBilan   = ThisWorkbook.Sheets("Bilan_Performance")
     Set wsDetails = ThisWorkbook.Sheets("Details_Suivi")
+    Set wsKPI     = ThisWorkbook.Sheets("Dashboard_KPI_Metier")
     If wsDetails Is Nothing Then
         Set wsDetails = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
         wsDetails.Name = "Details_Suivi"
+    End If
+    If wsKPI Is Nothing Then
+        Set wsKPI = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
+        wsKPI.Name = "Dashboard_KPI_Metier"
     End If
     On Error GoTo 0
 
@@ -1239,6 +1253,8 @@ Sub BilanPerformanceAlgorithme()
     Set affectationsProjet  = CreateObject("Scripting.Dictionary")
     Set prefsEquipes        = CreateObject("Scripting.Dictionary")
     Set projetsCapacites    = CreateObject("Scripting.Dictionary")
+    Set projetsMin          = CreateObject("Scripting.Dictionary")
+    Set projetsMax          = CreateObject("Scripting.Dictionary")
 
     For i = 2 To wsR.Cells(wsR.Rows.Count, "A").End(xlUp).Row
         nomP = Trim(wsR.Cells(i, 1).Value)
@@ -1266,7 +1282,11 @@ Sub BilanPerformanceAlgorithme()
     For i = 2 To wsP.Cells(wsP.Rows.Count, "A").End(xlUp).Row
         nomP = Trim(wsP.Cells(i, 1).Value)
         If nomP <> "" Then
-            projetsCapacites(nomP) = Array(CLng(wsP.Cells(i, 2).Value), CLng(wsP.Cells(i, 3).Value))
+            minEq = CLng(wsP.Cells(i, 2).Value)
+            maxEq = CLng(wsP.Cells(i, 3).Value)
+            projetsCapacites(nomP) = Array(minEq, maxEq)
+            projetsMin(nomP) = minEq
+            projetsMax(nomP) = maxEq
         End If
     Next i
 
@@ -1278,16 +1298,25 @@ Sub BilanPerformanceAlgorithme()
     Set projetsSousMinimum = New Collection
     Set projetsVides = New Collection
     nbProjetsMinAtteint = 0
+    nbVoeuxParEquipe = 0
+    nbTop3 = 0
+    nbRang4Plus = 0
+    totalCapaciteMin = 0
+    totalCapaciteMax = 0
+    totalDeficitMin = 0
 
     For Each eq In prefsEquipes.Keys
         If affectationsEquipe.Exists(eq) Then
             rang = 0
             Set prefs = prefsEquipes(eq)
+            If prefs.Count > nbVoeuxParEquipe Then nbVoeuxParEquipe = prefs.Count
             For j = 1 To prefs.Count
                 If StrComp(prefs(j), affectationsEquipe(eq), vbTextCompare) = 0 Then rang = j: Exit For
             Next j
             If rang > 0 Then
                 rangsObtenus.Add rang
+                If rang <= 3 Then nbTop3 = nbTop3 + 1
+                If rang >= 4 Then nbRang4Plus = nbRang4Plus + 1
                 Select Case rang
                     Case 1: nbChoix1 = nbChoix1 + 1
                     Case 2: nbChoix2 = nbChoix2 + 1
@@ -1301,8 +1330,14 @@ Sub BilanPerformanceAlgorithme()
 
     For Each projet In projetsCapacites.Keys
         nbAff = IIf(affectationsProjet.Exists(projet), affectationsProjet(projet).Count, 0)
+        minEq = CLng(projetsMin(projet))
+        maxEq = CLng(projetsMax(projet))
+        totalCapaciteMin = totalCapaciteMin + minEq
+        totalCapaciteMax = totalCapaciteMax + maxEq
+        totalDeficitMin = totalDeficitMin + IIf(nbAff < minEq, minEq - nbAff, 0)
+
         If nbAff = 0 Then projetsVides.Add projet
-        If nbAff < projetsCapacites(projet)(0) Then
+        If nbAff < minEq Then
             projetsSousMinimum.Add projet
         Else
             nbProjetsMinAtteint = nbProjetsMinAtteint + 1
@@ -1319,6 +1354,35 @@ Sub BilanPerformanceAlgorithme()
             ecartType = Sqr(sc / (rangsObtenus.Count - 1))
         End If
     End If
+
+    If nbEquipesTotal > 0 Then tauxAffectation = nbEquipesAffectees / nbEquipesTotal
+    If nbEquipesAffectees > 0 Then
+        tauxTop1 = nbChoix1 / nbEquipesAffectees
+        tauxTop3 = nbTop3 / nbEquipesAffectees
+        frustration = nbRang4Plus / nbEquipesAffectees
+        satisfactionPonderee = (nbChoix1 + 0.7 * nbChoix2 + 0.4 * nbChoix3 + 0.1 * (nbEquipesAffectees - nbTop3)) / nbEquipesAffectees
+    End If
+    If nbVoeuxParEquipe > 1 Then
+        satisfactionNormalisee = (nbVoeuxParEquipe - rangMoyen) / (nbVoeuxParEquipe - 1)
+        equiteNormalisee = ecartType / (nbVoeuxParEquipe - 1)
+    ElseIf nbEquipesAffectees > 0 Then
+        satisfactionNormalisee = 1
+        equiteNormalisee = 0
+    End If
+    If projetsCapacites.Count > 0 Then
+        tauxProjetsMinAtteint = nbProjetsMinAtteint / projetsCapacites.Count
+        tauxProjetsVides = projetsVides.Count / projetsCapacites.Count
+    End If
+    If totalCapaciteMax > 0 Then
+        tauxRemplissageCapacite = nbEquipesAffectees / totalCapaciteMax
+        tensionCapacitaire = nbEquipesTotal / totalCapaciteMax
+        robustesseCapacitaire = (totalCapaciteMax - nbEquipesAffectees) / totalCapaciteMax
+    End If
+    If totalCapaciteMin > 0 Then ratioDeficitMin = totalDeficitMin / totalCapaciteMin
+
+    satisfactionNormalisee = WorksheetFunction.Max(0, WorksheetFunction.Min(1, satisfactionNormalisee))
+    satisfactionPonderee = WorksheetFunction.Max(0, WorksheetFunction.Min(1, satisfactionPonderee))
+    robustesseCapacitaire = WorksheetFunction.Max(0, WorksheetFunction.Min(1, robustesseCapacitaire))
 
     ' ---- Écriture du bilan ----
     wsBilan.Columns("A").ColumnWidth = 45: wsBilan.Columns("B").ColumnWidth = 15
@@ -1340,6 +1404,9 @@ Sub BilanPerformanceAlgorithme()
     wsBilan.Cells(ligne, "A").Value = "Équipes ayant obtenu leur 1er vœu":   wsBilan.Cells(ligne, "B").Value = nbChoix1: ligne = ligne + 1
     wsBilan.Cells(ligne, "A").Value = "Équipes ayant obtenu leur 2ème vœu":  wsBilan.Cells(ligne, "B").Value = nbChoix2: ligne = ligne + 1
     wsBilan.Cells(ligne, "A").Value = "Équipes ayant obtenu leur 3ème vœu":  wsBilan.Cells(ligne, "B").Value = nbChoix3: ligne = ligne + 3
+    wsBilan.Cells(ligne, "A").Value = "Taux Top 1": wsBilan.Cells(ligne, "B").Value = Format(tauxTop1, "0.0%"): ligne = ligne + 1
+    wsBilan.Cells(ligne, "A").Value = "Taux Top 3": wsBilan.Cells(ligne, "B").Value = Format(tauxTop3, "0.0%"): ligne = ligne + 1
+    wsBilan.Cells(ligne, "A").Value = "Taux de frustration (rang >= 4)": wsBilan.Cells(ligne, "B").Value = Format(frustration, "0.0%"): ligne = ligne + 2
 
     wsBilan.Cells(ligne, "A").Value = "BILAN DU POINT DE VUE DES PROJETS"
     wsBilan.Range("A" & ligne & ":B" & ligne).Merge
@@ -1351,6 +1418,15 @@ Sub BilanPerformanceAlgorithme()
         wsBilan.Cells(ligne, "A").Value = "Taux de projets satisfaits"
         wsBilan.Cells(ligne, "B").Value = Format(nbProjetsMinAtteint / projetsCapacites.Count, "0.0%")
     End If: ligne = ligne + 2
+    wsBilan.Cells(ligne, "A").Value = "Remplissage de la capacité max"
+    wsBilan.Cells(ligne, "B").Value = Format(tauxRemplissageCapacite, "0.0%")
+    ligne = ligne + 1
+    wsBilan.Cells(ligne, "A").Value = "Déficit cumulé vs minima"
+    wsBilan.Cells(ligne, "B").Value = totalDeficitMin
+    ligne = ligne + 1
+    wsBilan.Cells(ligne, "A").Value = "Ratio déficit minima"
+    wsBilan.Cells(ligne, "B").Value = Format(ratioDeficitMin, "0.0%")
+    ligne = ligne + 2
     wsBilan.Range("A1:B" & ligne).Borders.Weight = xlThin
 
     ligne = ligne + 1
@@ -1387,8 +1463,33 @@ Sub BilanPerformanceAlgorithme()
         wsDetails.Cells(ld, "B").Value = "Aucun"
     End If
 
+    ' ---- Dashboard KPI métier avec seuils colorés ----
+    wsKPI.Cells.Clear
+    wsKPI.Range("A1:H1").Value = Array("KPI", "Valeur", "Unité", "Seuil Vert", "Seuil Jaune", "Seuil Orange", "Seuil Rouge", "Statut")
+    wsKPI.Range("A1:H1").Font.Bold = True
+    wsKPI.Range("A1:H1").Interior.Color = RGB(68, 114, 196)
+    wsKPI.Range("A1:H1").Font.Color = vbWhite
+
+    ligneKpi = 2
+    AddKpiRow wsKPI, ligneKpi, "Taux d'affectation des équipes", tauxAffectation, "0.0%", True, 0.98, 0.9, 0.75
+    AddKpiRow wsKPI, ligneKpi, "Satisfaction pondérée équipes", satisfactionPonderee, "0.0%", True, 0.85, 0.7, 0.55
+    AddKpiRow wsKPI, ligneKpi, "Satisfaction normalisée (0..1)", satisfactionNormalisee, "0.00", True, 0.8, 0.65, 0.5
+    AddKpiRow wsKPI, ligneKpi, "Équipes sur leur 1er choix", tauxTop1, "0.0%", True, 0.6, 0.45, 0.3
+    AddKpiRow wsKPI, ligneKpi, "Équipes dans le Top 3", tauxTop3, "0.0%", True, 0.9, 0.75, 0.6
+    AddKpiRow wsKPI, ligneKpi, "Frustration (rang >= 4)", frustration, "0.0%", False, 0.1, 0.2, 0.35
+    AddKpiRow wsKPI, ligneKpi, "Équité (écart-type normalisé)", equiteNormalisee, "0.00", False, 0.15, 0.25, 0.4
+    AddKpiRow wsKPI, ligneKpi, "Projets atteignant le minimum", tauxProjetsMinAtteint, "0.0%", True, 0.95, 0.8, 0.6
+    AddKpiRow wsKPI, ligneKpi, "Projets sans équipe", tauxProjetsVides, "0.0%", False, 0.05, 0.15, 0.3
+    AddKpiRow wsKPI, ligneKpi, "Remplissage capacité max", tauxRemplissageCapacite, "0.0%", True, 0.85, 0.7, 0.5
+    AddKpiRow wsKPI, ligneKpi, "Déficit relatif des minima", ratioDeficitMin, "0.0%", False, 0.02, 0.1, 0.25
+    AddKpiRow wsKPI, ligneKpi, "Tension capacitaire (équipes/capacité)", tensionCapacitaire, "0.00", False, 0.85, 0.95, 1
+    AddKpiRow wsKPI, ligneKpi, "Robustesse capacitaire (marge)", robustesseCapacitaire, "0.0%", True, 0.15, 0.08, 0.03
+
+    wsKPI.Columns("A:H").AutoFit
+    wsKPI.Range("A1:H" & ligneKpi - 1).Borders.Weight = xlThin
+
     Application.ScreenUpdating = True
-    MsgBox "Bilan de performance et listes de suivi générés.", vbInformation
+    MsgBox "Bilan de performance, listes de suivi et dashboard KPI générés.", vbInformation
 
 End Sub
 
@@ -1612,6 +1713,79 @@ Private Function ReadLongOrDefault(ByVal rawValue As Variant, ByVal defaultValue
         ReadLongOrDefault = defaultValue
     End If
 End Function
+
+Private Sub AddKpiRow(ByVal ws As Worksheet, ByRef rowIndex As Long, ByVal kpiName As String, ByVal kpiValue As Double, _
+                      ByVal numberFormat As String, ByVal higherIsBetter As Boolean, _
+                      ByVal seuilVert As Double, ByVal seuilJaune As Double, ByVal seuilOrange As Double)
+    Dim statut As String
+    Dim seuilFormat As String
+
+    statut = ComputeKpiStatus(kpiValue, higherIsBetter, seuilVert, seuilJaune, seuilOrange)
+    seuilFormat = IIf(InStr(1, numberFormat, "%") > 0, "0.0%", "0.00")
+
+    ws.Cells(rowIndex, 1).Value = kpiName
+    ws.Cells(rowIndex, 2).Value = kpiValue
+    ws.Cells(rowIndex, 2).NumberFormat = numberFormat
+
+    If higherIsBetter Then
+        ws.Cells(rowIndex, 4).Value = ">= " & Format(seuilVert, seuilFormat)
+        ws.Cells(rowIndex, 5).Value = ">= " & Format(seuilJaune, seuilFormat)
+        ws.Cells(rowIndex, 6).Value = ">= " & Format(seuilOrange, seuilFormat)
+        ws.Cells(rowIndex, 7).Value = "< " & Format(seuilOrange, seuilFormat)
+    Else
+        ws.Cells(rowIndex, 4).Value = "<= " & Format(seuilVert, seuilFormat)
+        ws.Cells(rowIndex, 5).Value = "<= " & Format(seuilJaune, seuilFormat)
+        ws.Cells(rowIndex, 6).Value = "<= " & Format(seuilOrange, seuilFormat)
+        ws.Cells(rowIndex, 7).Value = "> " & Format(seuilOrange, seuilFormat)
+    End If
+
+    ws.Cells(rowIndex, 8).Value = statut
+    ApplyKpiStatusStyle ws.Range("H" & rowIndex), statut
+    rowIndex = rowIndex + 1
+End Sub
+
+Private Function ComputeKpiStatus(ByVal value As Double, ByVal higherIsBetter As Boolean, _
+                                  ByVal seuilVert As Double, ByVal seuilJaune As Double, ByVal seuilOrange As Double) As String
+    If higherIsBetter Then
+        If value >= seuilVert Then
+            ComputeKpiStatus = "VERT"
+        ElseIf value >= seuilJaune Then
+            ComputeKpiStatus = "JAUNE"
+        ElseIf value >= seuilOrange Then
+            ComputeKpiStatus = "ORANGE"
+        Else
+            ComputeKpiStatus = "ROUGE"
+        End If
+    Else
+        If value <= seuilVert Then
+            ComputeKpiStatus = "VERT"
+        ElseIf value <= seuilJaune Then
+            ComputeKpiStatus = "JAUNE"
+        ElseIf value <= seuilOrange Then
+            ComputeKpiStatus = "ORANGE"
+        Else
+            ComputeKpiStatus = "ROUGE"
+        End If
+    End If
+End Function
+
+Private Sub ApplyKpiStatusStyle(ByVal target As Range, ByVal status As String)
+    Select Case UCase$(Trim$(status))
+        Case "VERT"
+            target.Interior.Color = RGB(198, 239, 206)
+            target.Font.Color = RGB(0, 97, 0)
+        Case "JAUNE"
+            target.Interior.Color = RGB(255, 242, 204)
+            target.Font.Color = RGB(127, 96, 0)
+        Case "ORANGE"
+            target.Interior.Color = RGB(248, 203, 173)
+            target.Font.Color = RGB(156, 87, 0)
+        Case Else
+            target.Interior.Color = RGB(255, 199, 206)
+            target.Font.Color = RGB(156, 0, 6)
+    End Select
+    target.Font.Bold = True
+End Sub
 
 Private Sub ImporterFeuilleReponsesDepuisFichier(ByVal filePath As String, ByVal wsDestination As Worksheet)
     Dim wb As Workbook, wsSrc As Worksheet

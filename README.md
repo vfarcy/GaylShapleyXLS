@@ -2,7 +2,7 @@
 
 Implémentation en **VBA Excel** de l'algorithme de Gale-Shapley pour affecter des **équipes d'élèves** à des projets de manière stable et optimale selon les préférences de chacun.
 
-> **État du projet ✅** : Code compilé et fonctionnel sur la branche main. 
+> **État du projet ✅** : Code compilé et fonctionnel sur la branche `dev`, avec dashboard KPI métier coloré.
 
 ---
 
@@ -181,6 +181,16 @@ Génère deux feuilles de synthèse :
 - Équipes non affectées
 - Projets n'ayant pas atteint leur minimum
 - Projets sans aucune équipe
+
+**`Dashboard_KPI_Metier`** (pilotage KPI avec seuils couleurs) :
+- Statut automatique **VERT / JAUNE / ORANGE / ROUGE** selon seuils
+- KPI équipes : satisfaction pondérée, satisfaction normalisée, top 1, top 3, frustration, équité
+- KPI projets : atteinte des minima, projets vides, remplissage capacité, déficit minima
+- KPI robustesse : tension capacitaire et marge de capacité
+
+Politique de seuils appliquée :
+- KPI où une valeur haute est meilleure (`higherIsBetter=True`) : `VERT >= seuil vert`, `JAUNE >= seuil jaune`, `ORANGE >= seuil orange`, sinon `ROUGE`.
+- KPI où une valeur basse est meilleure (`higherIsBetter=False`) : `VERT <= seuil vert`, `JAUNE <= seuil jaune`, `ORANGE <= seuil orange`, sinon `ROUGE`.
 
 ### 6. `RemplirAffectationsParProjet`
 Génère la feuille `Affectations_par_Projet` : vue détaillée avec, pour chaque projet, la liste des équipes affectées et la composition (membres) de chaque équipe.
